@@ -1,0 +1,1656 @@
+--- a/fontforge/charview.c
++++ b/fontforge/charview.c
+@@ -107,6 +107,11 @@ struct cvshows CVShows = {
+ 	1,		/* Check for self-intersections in the element view */
+ 	1		/* In tt debugging, mark changed rasters differently */
+ };
++struct cvshows CVShowsPrevewToggleSavedState;
++
++#define CID_Base	1001
++
++
+ static Color pointcol = 0xff0000;
+ static Color firstpointcol = 0x707000;
+ static Color selectedpointcol = 0xc8c800;
+@@ -3020,6 +3025,8 @@ static void CVDoFindInFontView(CharView *cv) {
+     GDrawRaise(((FontView *) (cv->b.fv))->gw);
+ }
+ 
++static uint16 HaveModifiers = 0;
++
+ static void CVCharUp(CharView *cv, GEvent *event ) {
+ 
+     #if defined(__MINGW32__)
+@@ -3027,6 +3034,19 @@ static void CVCharUp(CharView *cv, GEvent *event ) {
+ 	_mingw_hand_tool_hack(cv);
+     #endif
+ 
++    if( !event->u.chr.autorepeat
++        && (event->u.chr.keysym == GK_Control_L
++            || event->u.chr.keysym == GK_Control_R ))
++    {
++        HaveModifiers = 0;
++    }
++    
++    if ( !event->u.chr.autorepeat && !HaveModifiers && event->u.chr.keysym=='`' ) 
++    {
++        CVPreviewModeSet( cv->gw, false );
++        return;
++    }
++    
+ #if _ModKeysAutoRepeat
+     /* Under cygwin these keys auto repeat, they don't under normal X */
+     if ( event->u.chr.keysym == GK_Shift_L || event->u.chr.keysym == GK_Shift_R ||
+@@ -3053,6 +3073,8 @@ static void CVCharUp(CharView *cv, GEvent *event ) {
+ 	CVToolsSetCursor(cv,TrueCharState(event),NULL);
+     }
+ #else
++
++   
+     CVToolsSetCursor(cv,TrueCharState(event),NULL);
+     if ( event->u.chr.keysym == GK_Shift_L || event->u.chr.keysym == GK_Shift_R ||
+ 	     event->u.chr.keysym == GK_Alt_L || event->u.chr.keysym == GK_Alt_R ||
+@@ -4374,7 +4396,6 @@ return( GGadgetDispatchEvent(cv->hsb,event));
+ return( GGadgetDispatchEvent(cv->vsb,event));
+ 	}
+     }
+-
+     switch ( event->type ) {
+       case et_expose:
+ 	GDrawSetLineWidth(gw,0);
+@@ -5195,6 +5216,9 @@ return( true );
+ 
+ #define MID_Warnings	3000
+ 
++#define MID_Preview     4000
++
++
+ static void CVMenuClose(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+     CharView *cv = (CharView *) GDrawGetUserData(gw);
+     if ( cv->b.container )
+@@ -5706,6 +5730,111 @@ static void CVMenuFill(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+     GDrawRequestExpose(cv->v,NULL,false);
+ }
+ 
++static struct cvshows* cvshowsCopyTo( struct cvshows* dst, CharView* src ) 
++{
++    dst->showfore = src->showfore;
++//    dst->showback = src->showback;
++    dst->showgrids = src->showgrids;
++    dst->showhhints = src->showhhints;
++    dst->showvhints = src->showvhints;
++    dst->showdhints = src->showdhints;
++    dst->showpoints = src->showpoints;
++    dst->showfilled = src->showfilled;
++    dst->showrulers = src->showrulers;
++    dst->showrounds = src->showrounds;
++    dst->showmdx = src->showmdx;
++    dst->showmdy = src->showmdy;
++    dst->showhmetrics = src->showhmetrics;
++    dst->showvmetrics = src->showvmetrics;
++    dst->markextrema = src->markextrema;
++    dst->markpoi = src->markpoi;
++    dst->showblues = src->showblues;
++    dst->showfamilyblues = src->showfamilyblues;
++    dst->showanchor = src->showanchor;
++    dst->showcpinfo = src->showcpinfo;
++    dst->showtabs = src->showtabs;
++    dst->showsidebearings = src->showsidebearings;
++    dst->showrefnames = src->showrefnames;
++    dst->snapoutlines = src->snapoutlines;
++    dst->showalmosthvlines = src->showalmosthvlines;
++    dst->showalmosthvcurves = src->showalmosthvcurves;
++    dst->hvoffset = src->hvoffset;
++    dst->checkselfintersects = src->checkselfintersects;
++    dst->showdebugchanges = src->showdebugchanges;
++    return dst;
++}
++static CharView* cvshowsCopyFrom( CharView* dst, struct cvshows* src ) 
++{
++    dst->showfore = src->showfore;
++//    dst->showback = src->showback;
++    dst->showgrids = src->showgrids;
++    dst->showhhints = src->showhhints;
++    dst->showvhints = src->showvhints;
++    dst->showdhints = src->showdhints;
++    dst->showpoints = src->showpoints;
++    dst->showfilled = src->showfilled;
++    dst->showrulers = src->showrulers;
++    dst->showrounds = src->showrounds;
++    dst->showmdx = src->showmdx;
++    dst->showmdy = src->showmdy;
++    dst->showhmetrics = src->showhmetrics;
++    dst->showvmetrics = src->showvmetrics;
++    dst->markextrema = src->markextrema;
++    dst->markpoi = src->markpoi;
++    dst->showblues = src->showblues;
++    dst->showfamilyblues = src->showfamilyblues;
++    dst->showanchor = src->showanchor;
++    dst->showcpinfo = src->showcpinfo;
++    dst->showtabs = src->showtabs;
++    dst->showsidebearings = src->showsidebearings;
++    dst->showrefnames = src->showrefnames;
++    dst->snapoutlines = src->snapoutlines;
++    dst->showalmosthvlines = src->showalmosthvlines;
++    dst->showalmosthvcurves = src->showalmosthvcurves;
++    dst->hvoffset = src->hvoffset;
++    dst->checkselfintersects = src->checkselfintersects;
++    dst->showdebugchanges = src->showdebugchanges;
++    return dst;
++}
++
++void CVPreviewModeSet(GWindow gw, int checked ) {
++    CharView *cv = (CharView *) GDrawGetUserData(gw);
++    if( checked && cv->inPreviewMode )
++        return;
++
++    cv->inPreviewMode = checked;
++    if( checked )
++    {
++        cvshowsCopyTo( &CVShowsPrevewToggleSavedState, cv );
++        cv->showfore   = 1;
++        cv->showgrids  = 0;
++        cv->showhhints = 0;
++        cv->showvhints = 0;
++        cv->showdhints = 0;
++        cv->showpoints = 0;
++        cv->showfilled = 1;
++        cv->showrounds = 0;
++        cv->showanchor = 0;
++        cv->showrefnames = 0;
++        cv->showhmetrics = 0;
++        cv->showvmetrics = 0;
++    }
++    else
++    {
++        cvshowsCopyFrom( cv, &CVShowsPrevewToggleSavedState );
++    }
++    CVRegenFill(cv);
++    GDrawRequestExpose(cv->v,NULL,false);
++}
++
++
++                                    
++static void CVMenuPreview(GWindow gw,struct gmenuitem *mi,GEvent *e) {
++    CharView *cv = (CharView *) GDrawGetUserData(gw);
++    int checked = mi->ti.checked;
++    CVPreviewModeSet( gw, checked );
++}
++
+ static void CVMenuShowGridFit(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+     CharView *cv = (CharView *) GDrawGetUserData(gw);
+ 
+@@ -5943,10 +6072,23 @@ static void CVMenuChangeChar(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+     _CVMenuChangeChar(cv,mi->mid);
+ }
+ 
++
+ void CVChar(CharView *cv, GEvent *event ) {
+     extern float arrowAmount, arrowAccelFactor;
+     extern int navigation_mask;
+ 
++    if( event->u.chr.keysym == GK_Control_L
++        || event->u.chr.keysym == GK_Control_R )
++    {
++        HaveModifiers = 1;
++    }
++    
++    if( !HaveModifiers && event->u.chr.keysym=='`' ) 
++    {
++        CVPreviewModeSet( cv->gw, true );
++        return;
++    }
++    
+ #if _ModKeysAutoRepeat
+ 	/* Under cygwin these keys auto repeat, they don't under normal X */
+ 	if ( cv->autorpt!=NULL ) {
+@@ -6767,14 +6909,248 @@ static void CVUnlinkRef(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+     _CVUnlinkRef(cv);
+ }
+ 
+-static void CVRemoveUndoes(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+-    CharView *cv = (CharView *) GDrawGetUserData(gw);
++/* static void CVRemoveUndoes(GWindow gw,struct gmenuitem *mi,GEvent *e) { */
++/*     CharView *cv = (CharView *) GDrawGetUserData(gw); */
++
++/*     UndoesFree(cv->b.layerheads[cv->b.drawmode]->undoes); */
++/*     UndoesFree(cv->b.layerheads[cv->b.drawmode]->redoes); */
++/*     cv->b.layerheads[cv->b.drawmode]->undoes = cv->b.layerheads[cv->b.drawmode]->redoes = NULL; */
++/* } */
++
++typedef struct getValueDialogData
++{
++    int done;
++    int cancelled;
++    CharView *cv;
++    GWindow gw;
++    char* ret;
++    GTextInfo label;
++} GetValueDialogData;
++
++static int getValueDialogData_e_h(GWindow gw, GEvent *event) {
++    if ( event->type==et_close ) {
++	GetValueDialogData *hd = GDrawGetUserData(gw);
++	hd->done = true;
++    } else if ( event->type == et_char ) {
++return( false );
++    } else if ( event->type == et_map ) {
++	/* Above palettes */
++	GDrawRaise(gw);
++    }
++return( true );
++}
++
++static int getValueFromUser_OK(GGadget *g, GEvent *e)
++{
++    printf("getValueFromUser_OK()\n");
++    if ( e->type==et_controlevent && e->u.control.subtype == et_buttonactivate ) {
++        GetValueDialogData *hd = GDrawGetUserData(GGadgetGetWindow(g));
++        printf("getValueFromUser_OK(2)\n");
++        strcpy( hd->ret, hd->label.text );
++
++        strcpy( hd->ret, GGadgetGetTitle8(GWidgetGetControl(hd->gw,CID_Base)));
++        
++	/* int err = 0; */
++	/* base = GetReal8(hd->gw,CID_Base,_("Base:"),&err); */
++        
++//        strcpy( hd->ret, "hi there" );
++        hd->done = true;
++    }
++    return( true );
++}
++
++static int getValueFromUser_Cancel(GGadget *g, GEvent *e) {
++    printf("getValueFromUser_Cancel()\n");
++    if ( e->type==et_controlevent && e->u.control.subtype == et_buttonactivate ) {
++        GetValueDialogData *hd = GDrawGetUserData(GGadgetGetWindow(g));
++        hd->cancelled = true;
++        hd->done = true;
++    }
++    return( true );
++}
+ 
+-    UndoesFree(cv->b.layerheads[cv->b.drawmode]->undoes);
+-    UndoesFree(cv->b.layerheads[cv->b.drawmode]->redoes);
+-    cv->b.layerheads[cv->b.drawmode]->undoes = cv->b.layerheads[cv->b.drawmode]->redoes = NULL;
++static char* getValueFromUser( CharView *cv, const char* msg, const char* defaultValue )
++{
++    const char* windowTitle = "window";
++    const int retsz = 4096;
++    static char ret[4097];
++    static GetValueDialogData DATA;
++    GRect pos;
++    GWindow gw;
++    GWindowAttrs wattrs;
++    GGadgetCreateData gcd[9], *harray1[4], *harray2[9], *barray[7], *varray[5][2], boxes[5];
++    GTextInfo label[9];
++    char buffer[200]; unichar_t ubuf[200];
++
++    DATA.cancelled = false;
++    DATA.done = false;
++    DATA.cv = cv;
++    DATA.ret = ret;
++    ret[0] = '\0';
++    
++    if ( DATA.gw==NULL ) {
++	memset(&wattrs,0,sizeof(wattrs));
++	wattrs.mask = wam_events|wam_cursor|wam_utf8_wtitle|wam_undercursor|wam_isdlg|wam_restrict;
++	wattrs.event_masks = ~(1<<et_charup);
++	wattrs.restrict_input_to_me = 1;
++	wattrs.undercursor = 1;
++	wattrs.cursor = ct_pointer;
++	wattrs.utf8_window_title = windowTitle;
++	wattrs.is_dlg = true;
++	pos.x = pos.y = 0;
++	pos.width = GGadgetScale(GDrawPointsToPixels(NULL,170));
++	pos.height = GDrawPointsToPixels(NULL,90);
++	DATA.gw = gw = GDrawCreateTopWindow(NULL,&pos,getValueDialogData_e_h,&DATA,&wattrs);
++
++	memset(&label,0,sizeof(label));
++	memset(&gcd,  0,sizeof(gcd));
++	memset(&boxes,0,sizeof(boxes));
++
++            label[0].text = (unichar_t *) msg;
++	label[0].text_is_1byte = true;
++	label[0].text_in_resource = true;
++	gcd[0].gd.label = &label[0];
++	gcd[0].gd.pos.x = 5;
++            gcd[0].gd.pos.y = 5;
++	gcd[0].gd.flags = gg_enabled|gg_visible;
++	gcd[0].creator = GLabelCreate;
++	harray1[0] = GCD_Glue;
++            harray1[1] = &gcd[0];
++            harray1[2] = 0;
++            
++//	sprintf( buffer, "%s", defaultValue );
++	label[1].text = (unichar_t *) defaultValue;
++	label[1].text_is_1byte = true;
++            DATA.label = label[1];
++	gcd[1].gd.label = &label[1];
++	gcd[1].gd.pos.x = 5;
++            gcd[1].gd.pos.y = 17+5;
++            gcd[1].gd.pos.width = 40;
++	gcd[1].gd.flags = gg_enabled|gg_visible;
++	gcd[1].gd.cid = CID_Base;
++	gcd[1].creator = GTextFieldCreate;
++	harray2[0] = &gcd[1];
++            harray2[1] = 0;
++            
++            int idx = 2;
++	gcd[idx].gd.pos.x = 20-3;
++            gcd[idx].gd.pos.y = 17+37;
++	gcd[idx].gd.pos.width = -1;
++            gcd[idx].gd.pos.height = 0;
++	gcd[idx].gd.flags = gg_visible | gg_enabled | gg_but_default;
++	label[idx].text = (unichar_t *) _("_OK");
++	label[idx].text_is_1byte = true;
++	label[idx].text_in_resource = true;
++	gcd[idx].gd.mnemonic = 'O';
++	gcd[idx].gd.label = &label[idx];
++	gcd[idx].gd.handle_controlevent = getValueFromUser_OK;
++	gcd[idx].creator = GButtonCreate;
++	barray[0] = GCD_Glue;
++            barray[1] = &gcd[idx];
++            barray[2] = GCD_Glue;
++
++            ++idx;
++	gcd[idx].gd.pos.x = -20;
++            gcd[idx].gd.pos.y = 17+37+3;
++	gcd[idx].gd.pos.width = -1;
++            gcd[idx].gd.pos.height = 0;
++	gcd[idx].gd.flags = gg_visible | gg_enabled | gg_but_cancel;
++	label[idx].text = (unichar_t *) _("_Cancel");
++	label[idx].text_is_1byte = true;
++	label[idx].text_in_resource = true;
++	gcd[idx].gd.label = &label[idx];
++	gcd[idx].gd.mnemonic = 'C';
++	gcd[idx].gd.handle_controlevent = getValueFromUser_Cancel;
++	gcd[idx].creator = GButtonCreate;
++	barray[3] = GCD_Glue;
++            barray[4] = &gcd[idx];
++            barray[5] = GCD_Glue;
++            barray[6] = NULL;
++
++	gcd[7].gd.pos.x = 5;
++            gcd[7].gd.pos.y = 17+31;
++	gcd[7].gd.pos.width = 170-10;
++	gcd[7].gd.flags = gg_enabled|gg_visible;
++	gcd[7].creator = GLineCreate;
++
++	boxes[2].gd.flags = gg_enabled|gg_visible;
++	boxes[2].gd.u.boxelements = harray1;
++	boxes[2].creator = GHBoxCreate;
++
++	boxes[3].gd.flags = gg_enabled|gg_visible;
++	boxes[3].gd.u.boxelements = harray2;
++	boxes[3].creator = GHBoxCreate;
++
++	boxes[4].gd.flags = gg_enabled|gg_visible;
++	boxes[4].gd.u.boxelements = barray;
++	boxes[4].creator = GHBoxCreate;
++
++	varray[0][0] = &boxes[2]; varray[0][1] = NULL;
++	varray[1][0] = &boxes[3]; varray[1][1] = NULL;
++	varray[2][0] = &gcd[7];   varray[2][1] = NULL;
++	varray[3][0] = &boxes[4]; varray[3][1] = NULL;
++	varray[4][0] = NULL;
++
++	boxes[0].gd.pos.x = boxes[0].gd.pos.y = 2;
++	boxes[0].gd.flags = gg_enabled|gg_visible;
++	boxes[0].gd.u.boxelements = varray[0];
++	boxes[0].creator = GHVGroupCreate;
++	
++
++	GGadgetsCreate(gw,boxes);
++	GHVBoxSetExpandableCol(boxes[2].ret,gb_expandglue);
++	GHVBoxSetExpandableCol(boxes[3].ret,gb_expandglue);
++	GHVBoxSetExpandableCol(boxes[4].ret,gb_expandgluesame);
++	GHVBoxFitWindow(boxes[0].ret);
++    } else {
++	gw = DATA.gw;
++	snprintf( ret, retsz, "%s", defaultValue );
++	GGadgetSetTitle8(GWidgetGetControl(gw,CID_Base),ret);
++	GDrawSetTransientFor(gw,(GWindow) -1);
++    }
++
++    GWidgetIndicateFocusGadget(GWidgetGetControl(gw,CID_Base));
++    GTextFieldSelect(GWidgetGetControl(gw,CID_Base),0,-1);
++
++    GWidgetHidePalettes();
++    GDrawSetVisible(gw,true);
++    while ( !DATA.done )
++	GDrawProcessOneEvent(NULL);
++    GDrawSetVisible(gw,false);
++
++    if( DATA.cancelled )
++        return 0;
++    return ret;
+ }
+ 
++static int toint( char* v )
++{
++    if( !v )
++        return 0;
++    return atoi(v);
++}
++static char* tostr( int v )
++{
++    const int bufsz = 100;
++    static char buf[101];
++    snprintf(buf,bufsz,"%ld",v);
++    return buf;
++}
++
++
++static void CVRemoveUndoes(GWindow gw,struct gmenuitem *mi,GEvent *e)
++{
++    CharView *cv = (CharView *) GDrawGetUserData(gw);
++    static int lastValue = 10;
++    printf("keeping entries... lastValue:%d\n", lastValue );
++    int v = toint(getValueFromUser( cv, "How many most-recent Undos should be kept?", tostr(lastValue)));
++    lastValue = v;
++    printf("keeping %d entries... lastValue:%d\n", v, lastValue );
++    UndoesFreeButRetainFirstN(&cv->b.layerheads[cv->b.drawmode]->undoes,v);
++    UndoesFreeButRetainFirstN(&cv->b.layerheads[cv->b.drawmode]->redoes,v);
++}
++
++
+ /* We can only paste if there's something in the copy buffer */
+ /* we can only copy if there's something selected to copy */
+ /* figure out what things are possible from the edit menu before the user */
+@@ -9422,7 +9798,7 @@ static GMenuItem2 edlist[] = {
+     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, }},
+     { { (unichar_t *) N_("U_nlink Reference"), (GImage *) "editunlink.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'U' }, H_("Unlink Reference|Ctl+U"), NULL, NULL, CVUnlinkRef, MID_UnlinkRef },
+     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, }},
+-    { { (unichar_t *) N_("Remo_ve Undoes"), (GImage *) "menuempty.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'e' }, H_("Remove Undoes|No Shortcut"), NULL, NULL, CVRemoveUndoes, MID_RemoveUndoes },
++    { { (unichar_t *) N_("Remo_ve Undoes..."), (GImage *) "menuempty.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'e' }, H_("Remove Undoes|No Shortcut"), NULL, NULL, CVRemoveUndoes, MID_RemoveUndoes },
+     { NULL }
+ };
+ 
+@@ -9841,6 +10217,7 @@ static GMenuItem2 swlist[] = {
+     { { (unichar_t *) N_("_Side Bearings"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'M' }, H_("Side Bearings|No Shortcut"), NULL, NULL, CVMenuShowSideBearings, MID_ShowSideBearings },
+     { { (unichar_t *) N_("Reference Names"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'M' }, H_("Reference Names|No Shortcut"), NULL, NULL, CVMenuShowRefNames, MID_ShowRefNames },
+     { { (unichar_t *) N_("_Fill"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'l' }, H_("Fill|No Shortcut"), NULL, NULL, CVMenuFill, MID_Fill },
++    { { (unichar_t *) N_("_Preview"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'l' }, H_("Preview|Ctl+`"), NULL, NULL, CVMenuPreview, MID_Preview },
+     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, }},
+     { { (unichar_t *) N_("Pale_ttes"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'P' }, NULL, pllist, pllistcheck },
+     { { (unichar_t *) N_("_Glyph Tabs"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'R' }, H_("Glyph Tabs|No Shortcut"), NULL, NULL, CVMenuShowTabs, MID_ShowTabs },
+@@ -10125,7 +10502,7 @@ static void _CharViewCreate(CharView *cv, SplineChar *sc, FontView *fv,int enc)
+     cv->showanchor = CVShows.showanchor;
+     cv->showcpinfo = CVShows.showcpinfo;
+     cv->showtabs = CVShows.showtabs;
+-
++    cv->inPreviewMode = 0;
+     cv->checkselfintersects = CVShows.checkselfintersects;
+ 
+     cv->showdebugchanges = CVShows.showdebugchanges;
+diff --git a/fontforge/cvundoes.c b/fontforge/cvundoes.c
+index fd5623a..42c76cf 100644
+--- a/fontforge/cvundoes.c
++++ b/fontforge/cvundoes.c
+@@ -1,3 +1,4 @@
++// -*- tab-width: 10 -*-
+ /* Copyright (C) 2000-2012 by George Williams */
+ /*
+  * Redistribution and use in source and binary forms, with or without
+@@ -37,6 +38,43 @@ int copymetadata = 0;
+ int copyttfinstr = 0;
+ int export_clipboard = 1;
+ 
++///////////
++
++#include <execinfo.h>
++#include <stdio.h>
++
++void BackTraceFD( int fd )
++{
++    const int arraysz = 500;
++    void* array[arraysz];
++    size_t size;
++    
++    size = backtrace( array, arraysz );
++    backtrace_symbols_fd( array, size, fd );
++    
++    /* char** symbarray = backtrace_symbols( array, size ); */
++    /* if( symbarray ) */
++    /* { */
++    /*     int i=0; */
++    /*     for( i=0; i < size; ++i ) */
++    /*     { */
++    /*         const char* s = symbarray[i]; */
++    /*         printf("sym:%s\n", s ); */
++    /*     } */
++        
++    /* } */
++    
++        
++    
++}
++
++void BackTrace( const char* msg )
++{
++    fprintf( stderr, msg );
++    BackTraceFD( 2 );
++}
++
++
+ /* ********************************* Undoes ********************************* */
+ 
+ int maxundoes = 12;		/* -1 is infinite */
+@@ -380,7 +418,7 @@ return;
+     }
+ }
+ 
+-static void *UHintCopy(SplineChar *sc,int docopy) {
++void *UHintCopy(SplineChar *sc,int docopy) {
+     StemInfo *h = sc->hstem, *v = sc->vstem, *last=NULL;
+     DStemInfo *d = sc->dstem;
+     void *ret = NULL;
+@@ -417,7 +455,7 @@ static void *UHintCopy(SplineChar *sc,int docopy) {
+ return(ret);
+ }
+ 
+-static void ExtractHints(SplineChar *sc,void *hints,int docopy) {
++void ExtractHints(SplineChar *sc,void *hints,int docopy) {
+     StemInfo *h = NULL, *v = NULL, *p;
+     DStemInfo *d = NULL;
+     StemInfo *pv = NULL, *pd = NULL;
+@@ -458,6 +496,39 @@ static void ExtractHints(SplineChar *sc,void *hints,int docopy) {
+     sc->vconflicts = StemInfoAnyOverlaps(v);
+ }
+ 
++void UndoesFreeButRetainFirstN( Undoes** undopp, int retainAmount )
++{
++    printf("UndoesFreeButRetainFirstN(1) %d\n", retainAmount );
++    
++    if( !undopp || !*undopp )
++        return;
++    Undoes* undo = *undopp;
++    // wipe them all will change the list header pointer too
++    if( !retainAmount )
++    {
++        UndoesFree( undo );
++        *undopp = 0;
++        return;
++    }
++    printf("UndoesFreeButRetainFirstN(2) %d\n", retainAmount );
++
++    Undoes* undoprev = undo;
++    for( ; retainAmount > 0 && undo ; retainAmount-- )
++    {
++        undoprev = undo;
++        undo = undo->next;
++    }
++    printf("UndoesFreeButRetainFirstN(3) %d\n", retainAmount );
++    // not enough items to need to do a trim.
++    if( retainAmount > 0 )
++        return;
++
++    // break off and free the tail
++    UndoesFree( undo );
++    undoprev->next = 0;
++}
++
++
+ void UndoesFree(Undoes *undo) {
+     Undoes *unext;
+     BDFRefChar *head, *next;
+@@ -540,9 +611,11 @@ static Undoes *AddUndo(Undoes *undo,Undoes **uhead,Undoes **rhead) {
+ return( undo );
+ }
+ 
+-static Undoes *CVAddUndo(CharViewBase *cv,Undoes *undo) {
+-return( AddUndo(undo,&cv->layerheads[cv->drawmode]->undoes,
+-	&cv->layerheads[cv->drawmode]->redoes));
++static Undoes *CVAddUndo(CharViewBase *cv,Undoes *undo)
++{
++    BackTrace("CVAddUndo()");
++    return( AddUndo(undo,&cv->layerheads[cv->drawmode]->undoes,
++                    &cv->layerheads[cv->drawmode]->redoes));
+ }
+ 
+ int CVLayer(CharViewBase *cv) {
+diff --git a/fontforge/metricsview.c b/fontforge/metricsview.c
+index 6337c67..06c557a 100644
+--- a/fontforge/metricsview.c
++++ b/fontforge/metricsview.c
+@@ -2774,7 +2774,7 @@ static int PXSZ_OK(GGadget *g, GEvent *e) {
+ 	dpi = GetInt8( pxsz->gw, CID_DPI, _("DPI"), &err );
+ 	if ( err )
+ return(true);
+-	if ( ptsize<3 || ptsize>300 || dpi<10 || dpi > 2000 ) {
++	if ( ptsize<3 || ptsize>1500 || dpi<10 || dpi > 2000 ) {
+ 	    ff_post_error(_("Number out of range"),_("Number out of range"));
+ return( true );
+ 	}
+@@ -2942,6 +2942,7 @@ static void MVMenuSizeWindow(GWindow mgw,struct gmenuitem *mi,GEvent *e) {
+     MVSetVSb(mv);
+ }
+ 
++
+ static void MVMenuChangePointSize(GWindow mgw,struct gmenuitem *mi,GEvent *e) {
+     MetricsView *mv = (MetricsView *) GDrawGetUserData(mgw);
+ 
+diff --git a/fontforge/prefs.c b/fontforge/prefs.c
+index 4bf7426..fb87410 100644
+--- a/fontforge/prefs.c
++++ b/fontforge/prefs.c
+@@ -319,7 +319,7 @@ static struct prefs_list {
+ 	{ N_("JoinSnap"), pr_real, &joinsnap, NULL, NULL, '\0', NULL, 0, N_("The Edit->Join command will join points which are this close together\nA value of 0 means they must be coincident") },
+ 	{ N_("StopAtJoin"), pr_bool, &stop_at_join, NULL, NULL, '\0', NULL, 0, N_("When dragging points in the outline view a join may occur\n(two open contours may connect at their endpoints). When\nthis is On a join will cause FontForge to stop moving the\nselection (as if the user had released the mouse button).\nThis is handy if your fingers are inclined to wiggle a bit.") },
+ 	{ N_("CopyMetaData"), pr_bool, &copymetadata, NULL, NULL, '\0', NULL, 0, N_("When copying glyphs from the font view, also copy the\nglyphs' metadata (name, encoding, comment, etc).") },
+-	{ N_("UndoDepth"), pr_int, &maxundoes, NULL, NULL, '\0', NULL, 0, N_("The maximum number of Undoes/Redoes stored in a glyph") },
++	{ N_("UndoDepth"), pr_int, &maxundoes, NULL, NULL, '\0', NULL, 0, N_("The maximum number of Undoes/Redoes stored in a glyph. Use -1 for infinite Undoes\n(but watch RAM consumption and use the Edit menu's Remove Undoes as needed)") },
+ 	{ N_("UpdateFlex"), pr_bool, &updateflex, NULL, NULL, '\0', NULL, 0, N_("Figure out flex hints after every change") },
+ 	{ N_("AutoKernDialog"), pr_bool, &default_autokern_dlg, NULL, NULL, '\0', NULL, 0, N_("Open AutoKern dialog for new kerning subtables") },
+ 	{ NULL }
+diff --git a/fontforge/sfd.c b/fontforge/sfd.c
+index 76fcdb5..b5c5eba 100644
+--- a/fontforge/sfd.c
++++ b/fontforge/sfd.c
+@@ -46,8 +46,14 @@
+ # define NAME_MAX _POSIX_NAME_MAX
+ #endif
+ 
++#define SFD_VERSION_CONTAINS_UNDO_STACK 1
++
+ extern struct compressors compressors[];
+ 
++static char *joins[] = { "miter", "round", "bevel", "inher", NULL };
++static char *caps[] = { "butt", "round", "square", "inher", NULL };
++static char *spreads[] = { "pad", "reflect", "repeat", NULL };
++
+ /* I will retain this list in case there are still some really old sfd files */
+ /*  including numeric encodings.  This table maps them to string encodings */
+ static const char *charset_names[] = {
+@@ -109,6 +115,20 @@ static char base64[64] = {
+  'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+  'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'};
+ 
++static void SFDDumpRefs(FILE *sfd,RefChar *refs, char *name,EncMap *map, int *newgids);
++static RefChar *SFDGetRef(FILE *sfd, int was_enc);
++static void SFDDumpImage(FILE *sfd,ImageList *img);
++static AnchorPoint *SFDReadAnchorPoints(FILE *sfd,SplineChar *sc,AnchorPoint** alist, AnchorPoint *lastap);
++static const char *end_tt_instrs = "EndTTInstrs";
++static void SFDDumpTtfInstrs(FILE *sfd,SplineChar *sc);
++static void SFDDumpTtfInstrsExplicit(FILE *sfd,SplineChar *sc, uint8 *ttf_instrs, int16 ttf_instrs_len );
++static void SFDDumpHintList(FILE *sfd,char *key, StemInfo *h);
++static void SFDDumpDHintList( FILE *sfd,char *key, DStemInfo *d );
++static StemInfo *SFDReadHints(FILE *sfd);
++static DStemInfo *SFDReadDHints( SplineFont *sf,FILE *sfd,int old );
++extern void ExtractHints(SplineChar *sc,void *hints,int docopy);
++extern void *UHintCopy(SplineChar *sc,int docopy);
++
+ static void utf7_encode(FILE *sfd,long ch) {
+ 
+     putc(base64[(ch>>18)&0x3f],sfd);
+@@ -699,10 +719,10 @@ return;
+ }
+ #endif
+ 
+-static void SFDDumpAnchorPoints(FILE *sfd,SplineChar *sc) {
+-    AnchorPoint *ap;
+-
+-    for ( ap = sc->anchor; ap!=NULL; ap=ap->next ) {
++static void SFDDumpAnchorPoints(FILE *sfd,AnchorPoint *ap)
++{
++    for ( ; ap; ap=ap->next )
++    {
+ 	fprintf( sfd, "AnchorPoint: " );
+ 	SFDDumpUTF7Str(sfd,ap->anchor->name);
+ 	fprintf( sfd, "%g %g %s %d",
+@@ -808,6 +830,215 @@ return( NULL );
+ return( rle );
+ }
+ 
++static void SFDDumpBrush( FILE *sfd, struct brush* brush )
++{
++    fprintf(sfd, "Brush: #%06x %g\n", brush->col, brush->opacity );
++    if( brush->gradient )
++        SFDDumpGradient(sfd,"Gradient:", brush->gradient );
++    if( brush->pattern )
++        SFDDumpPattern(sfd,"Pattern:", brush->pattern );
++    fprintf(sfd, "EndBrush\n");
++}
++
++static void SFDDumpPen( FILE *sfd, struct pen* p )
++{
++    fprintf(sfd, "Pen: %g %s %s [%g %g %g %g] [",
++            p->width, joins[p->linejoin], caps[p->linecap],
++            (double) p->trans[0], (double) p->trans[1],
++            (double) p->trans[2], (double) p->trans[3] );
++    if ( p->dashes[0]==0 && p->dashes[1]==DASH_INHERITED )
++        fprintf(sfd,"0 %d]\n", DASH_INHERITED);
++    else
++    {
++        int j;
++        for ( j=0; j<DASH_MAX && p->dashes[j]!=0; ++j )
++            fprintf( sfd,"%d ", p->dashes[j]);
++        fprintf(sfd,"]\n");
++    }
++    SFDDumpBrush( sfd, &p->brush );
++    fprintf(sfd, "EndPen\n");
++}
++
++
++RefChar* createTestRefChar( SplineChar *sc )
++{
++    RefChar* ref = RefCharCreate();
++
++    ref->unicode_enc  = 3;
++    ref->orig_pos     = 4;
++    ref->adobe_enc    = getAdobeEnc("g");
++    ref->transform[0] = ref->transform[3] = 1.0;
++    ref->sc = sc;
++    
++    return ref;
++}
++
++AnchorPoint* createTestAnchor()
++{
++    AnchorPoint* ap = chunkalloc(sizeof(AnchorPoint));
++    ap->anchor = chunkalloc(sizeof(AnchorClass));
++    ap->anchor->name = utf8_verify_copy("abc");
++
++    ap->me.x = 1.2;
++    ap->me.y = 3.4;
++    ap->type=at_mark;
++    ap->lig_index = 5;
++    ap->has_ttf_pt = 1;
++    ap->ttf_pt_index = 6;
++
++    ap->next = 0;
++    return ap;
++}
++struct imagelist * createTestImageList()
++{
++    struct imagelist * il = 0;
++    return il;
++}
++
++
++static void UndoesPushTestObjects( SplineChar *sc, Undoes ** ulist )
++{
++    Undoes *undo = chunkalloc(sizeof(Undoes));
++
++    undo->undotype        = ut_state;
++    undo->was_modified    = 1;
++    undo->was_order2      = 1;
++    undo->u.state.width   = 4321;
++    undo->u.state.vwidth  = 102;
++    undo->u.state.splines = 0;
++    undo->u.state.refs    = createTestRefChar( sc );
++    undo->u.state.anchor  = createTestAnchor();
++    undo->u.state.images  = createTestImageList();
++
++#ifdef FONTFORGE_CONFIG_TYPE3
++    /* BrushCopy(&undo->u.state.fill_brush,&cv->layerheads[cv->drawmode]->fill_brush,NULL); */
++    /* PenCopy(&undo->u.state.stroke_pen,&cv->layerheads[cv->drawmode]->stroke_pen,NULL); */
++    /* undo->u.state.dofill = cv->layerheads[cv->drawmode]->dofill; */
++    /* undo->u.state.dostroke = cv->layerheads[cv->drawmode]->dostroke; */
++    /* undo->u.state.fillfirst = cv->layerheads[cv->drawmode]->fillfirst; */
++#endif
++
++    undo->next = *ulist;
++    *ulist = undo;
++}
++
++
++static void SFDDumpUndo(FILE *sfd,SplineChar *sc,Undoes *u, char* keyPrefix, int idx )
++{
++    fprintf(sfd, "%sOperation\n",      keyPrefix );
++    fprintf(sfd, "Index: %d\n",        idx );
++    fprintf(sfd, "Type: %d\n",         u->undotype );
++    fprintf(sfd, "WasModified: %d\n",  u->was_modified );
++    fprintf(sfd, "WasOrder2: %d\n",    u->was_order2 );
++
++    printf("UNDO Type: %d\n", u->undotype );
++    if( u->undotype == ut_state )
++        printf("UNDO Type: %d width:%d \n", u->undotype, u->u.state.width );
++    
++    switch( u->undotype )
++    {
++        case ut_state:
++            printf("w:%d vw:%d lb:%d ue:%d images:%p\n", u->u.state.width, u->u.state.vwidth,
++                   u->u.state.lbearingchange, u->u.state.unicodeenc, u->u.state.images );
++                   
++            fprintf(sfd, "Width: %d\n",           u->u.state.width );
++            fprintf(sfd, "VWidth: %d\n",          u->u.state.vwidth );
++            fprintf(sfd, "LBearingChange: %d\n",  u->u.state.lbearingchange );
++            fprintf(sfd, "UnicodeEnc: %d\n",      u->u.state.unicodeenc );
++            if( u->u.state.charname )
++                fprintf(sfd, "Charname: \"%s\"\n", u->u.state.charname );
++            if( u->u.state.comment )
++                fprintf(sfd, "Comment: \"%s\"\n", u->u.state.comment );
++            if( u->u.state.possub )
++            {
++                //PST *possub;
++            }
++
++            if( u->u.state.refs )
++            {
++                printf("saving some refs too!\n");
++                SFDDumpRefs( sfd, u->u.state.refs, 0, 0, 0 );
++            }
++            
++            if( u->u.state.images )
++            {
++                printf("have an image for this undo...\n");
++                SFDDumpImage( sfd, u->u.state.images );
++            }
++            if( u->u.state.hints )
++            {
++                /* void *hints;			/\* ut_statehint, ut_statename *\/ */
++            }
++            
++            fprintf(sfd, "InstructionsLength: %d\n", u->u.state.instrs_len );
++            /* uint8 *instrs; */
++            
++            if( u->u.state.anchor )
++            {
++                SFDDumpAnchorPoints( sfd, u->u.state.anchor );
++            }
++            
++            if( u->u.state.splines )
++            {
++                fprintf(sfd, "SplineSet\n", keyPrefix, idx );
++                SFDDumpSplineSet( sfd, u->u.state.splines );
++            }
++            
++#ifdef FONTFORGE_CONFIG_TYPE3
++//            SFDDumpBrush( sfd, &u->u.state.fill_brush );
++//            SFDDumpPen(   sfd, &u->u.state.stroke_pen );
++//            fprintf(sfd, "DoFill: %d\n", u->u.state.dofill );
++//            fprintf(sfd, "DoStroke: %d\n", u->u.state.dostroke );
++//            fprintf(sfd, "FillFirst: %d\n", u->u.state.fillfirst );
++#endif
++            break;
++
++            
++        case ut_statehint:
++        {
++            SplineChar* tsc = 0;
++            tsc = SplineCharCopy( sc, 0, 0 );
++            ExtractHints( tsc, u->u.state.hints, 1 );
++            SFDDumpHintList(  sfd, "HStem: ",  tsc->hstem);
++            SFDDumpHintList(  sfd, "VStem: ",  tsc->vstem);
++            SFDDumpDHintList( sfd, "DStem2: ", tsc->dstem);
++            SplineCharFree( tsc );
++            
++            if( u->u.state.instrs_len )
++                SFDDumpTtfInstrsExplicit( sfd, sc, u->u.state.instrs, u->u.state.instrs_len );
++            break;
++        }
++
++        case ut_hints:
++        {
++            SplineChar* tsc = 0;
++            tsc = SplineCharCopy( sc, 0, 0 );
++            tsc->ttf_instrs = 0;
++            ExtractHints( tsc, u->u.state.hints, 1 );
++            SFDDumpHintList(  sfd, "HStem: ",  tsc->hstem);
++            SFDDumpHintList(  sfd, "VStem: ",  tsc->vstem);
++            SFDDumpDHintList( sfd, "DStem2: ", tsc->dstem);
++            SplineCharFree( tsc );
++
++            if( u->u.state.instrs_len )
++                SFDDumpTtfInstrsExplicit( sfd, sc, u->u.state.instrs, u->u.state.instrs_len );
++            if( u->copied_from && u->copied_from->fullname )
++                fprintf(sfd, "CopiedFrom: %s\n", u->copied_from->fullname );
++            break;
++        }
++        
++        case ut_width:
++        case ut_vwidth:
++        {
++            fprintf(sfd, "Width: %d\n", u->u.width );
++            break;
++        }
++        
++    }
++
++    fprintf(sfd, "End%sOperation\n", keyPrefix );
++}
++
+ static void SFDDumpImage(FILE *sfd,ImageList *img) {
+     GImage *image = img->image;
+     struct _GImage *base = image->list_len==0?image->u.image:image->u.images[0];
+@@ -871,7 +1102,8 @@ static void SFDDumpImage(FILE *sfd,ImageList *img) {
+     fprintf(sfd,"\nEndImage\n" );
+ }
+ 
+-static void SFDDumpHintList(FILE *sfd,char *key, StemInfo *h) {
++static void SFDDumpHintList(FILE *sfd,char *key, StemInfo *h)
++{
+     HintInstance *hi;
+ 
+     if ( h==NULL )
+@@ -909,10 +1141,9 @@ return;
+     }
+ }
+ 
+-static const char *end_tt_instrs = "EndTTInstrs";
+-static void SFDDumpTtfInstrs(FILE *sfd,SplineChar *sc) {
+-#if 1
+-    char *instrs = _IVUnParseInstrs( sc->ttf_instrs,sc->ttf_instrs_len );
++static void SFDDumpTtfInstrsExplicit(FILE *sfd,SplineChar *sc, uint8 *ttf_instrs, int16 ttf_instrs_len )
++{
++    char *instrs = _IVUnParseInstrs( ttf_instrs, ttf_instrs_len );
+     char *pt;
+     fprintf( sfd, "TtInstrs:\n" );
+     for ( pt=instrs; *pt!='\0'; ++pt )
+@@ -921,19 +1152,10 @@ static void SFDDumpTtfInstrs(FILE *sfd,SplineChar *sc) {
+ 	putc('\n',sfd);
+     free(instrs);
+     fprintf( sfd, "%s\n", end_tt_instrs );
+-#else
+-    struct enc85 enc;
+-    int i;
+-
+-    memset(&enc,'\0',sizeof(enc));
+-    enc.sfd = sfd;
+-
+-    fprintf( sfd, "TtfInstrs: %d\n", sc->ttf_instrs_len );
+-    for ( i=0; i<sc->ttf_instrs_len; ++i )
+-	SFDEnc85(&enc,sc->ttf_instrs[i]);
+-    SFDEnc85EndEnc(&enc);
+-    fprintf(sfd,"\nEndTtf\n" );
+-#endif
++}
++static void SFDDumpTtfInstrs(FILE *sfd,SplineChar *sc)
++{
++    SFDDumpTtfInstrsExplicit( sfd, sc, sc->ttf_instrs,sc->ttf_instrs_len );
+ }
+ 
+ static void SFDDumpTtfTable(FILE *sfd,struct ttf_table *tab,SplineFont *sf) {
+@@ -1184,9 +1406,6 @@ return( PyFF_UnPickleMeToObjects(buf));
+ }
+ 
+ #ifdef FONTFORGE_CONFIG_TYPE3
+-static char *joins[] = { "miter", "round", "bevel", "inher", NULL };
+-static char *caps[] = { "butt", "round", "square", "inher", NULL };
+-static char *spreads[] = { "pad", "reflect", "repeat", NULL };
+ 
+ static void SFDDumpGradient(FILE *sfd, char *keyword, struct gradient *gradient) {
+     int i;
+@@ -1216,7 +1435,7 @@ static void SFDDumpPattern(FILE *sfd, char *keyword, struct pattern *pattern) {
+ }
+ #endif
+ 
+-static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids) {
++static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int saveUndoes) {
+     ImageList *img;
+     KernPair *kp;
+     PST *pst;
+@@ -1294,9 +1513,40 @@ static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids) {
+     }
+     if ( sc->ttf_instrs_len!=0 )
+ 	SFDDumpTtfInstrs(sfd,sc);
+-    SFDDumpAnchorPoints(sfd,sc);
++    SFDDumpAnchorPoints(sfd,sc->anchor);
+     fprintf( sfd, "LayerCount: %d\n", sc->layer_cnt );
+     for ( i=0; i<sc->layer_cnt; ++i ) {
++        if( saveUndoes )
++        {
++            if( sc->layers[i].undoes || sc->layers[i].redoes )
++            {
++                fprintf(sfd, "UndoRedoHistory\n" );
++                fprintf(sfd, "Layer: %d\n", i );
++                int idx = 0;
++                Undoes *undo = 0;
++
++                
++                fprintf(sfd, "Undoes\n" );
++                idx = 0;
++                undo = sc->layers[i].undoes;
++//                UndoesPushTestObjects( sc, &undo );
++                for( ; undo; undo = undo->next, idx++ )
++                {
++                    SFDDumpUndo( sfd, sc, undo, "Undo", idx );
++                }
++                fprintf(sfd, "EndUndoes\n" );
++                fprintf(sfd, "Redoes\n" );
++                idx = 0;
++                undo = sc->layers[i].redoes;
++                for( ; undo; undo = undo->next, idx++ )
++                {
++                    SFDDumpUndo( sfd, sc, undo, "Redo", idx );
++                }
++                fprintf(sfd, "EndRedoes\n" );
++                fprintf(sfd, "EndUndoRedoHistory\n" );
++            }
++        }
++        
+ #ifdef FONTFORGE_CONFIG_TYPE3
+ 	if ( sc->parent->multilayer ) {
+ 	    fprintf(sfd, "Layer: %d  %d %d %d  #%06x %g  #%06x %g %g %s %s [%g %g %g %g] [",
+@@ -2360,16 +2610,16 @@ static int SFD_Dump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
+ 	for ( i=0; i<sf->glyphcnt; ++i ) {
+ 	    if ( !SFDOmit(sf->glyphs[i]) ) {
+ 		if ( !todir )
+-		    SFDDumpChar(sfd,sf->glyphs[i],map,newgids);
++		    SFDDumpChar(sfd,sf->glyphs[i],map,newgids, SFD_VERSION_CONTAINS_UNDO_STACK );
+ 		else {
+ 		    char *glyphfile = galloc(strlen(dirname)+2*strlen(sf->glyphs[i]->name)+20);
+ 		    FILE *gsfd;
+ 		    appendnames(glyphfile,dirname,"/",sf->glyphs[i]->name,GLYPH_EXT );
+ 		    gsfd = fopen(glyphfile,"w");
+ 		    if ( gsfd!=NULL ) {
+-			SFDDumpChar(gsfd,sf->glyphs[i],map,newgids);
+-			if ( ferror(gsfd)) err = true;
+-			if ( fclose(gsfd)) err = true;
++                                SFDDumpChar(gsfd,sf->glyphs[i],map,newgids, SFD_VERSION_CONTAINS_UNDO_STACK );
++                                if ( ferror(gsfd)) err = true;
++                                if ( fclose(gsfd)) err = true;
+ 		    } else
+ 			err = true;
+ 		    free(glyphfile);
+@@ -2522,7 +2772,7 @@ static int SFDDump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
+     ff_progress_start_indicator(10,_("Saving..."),_("Saving Spline Font Database"),_("Saving Outlines"),
+ 	    realcnt,i+1);
+     ff_progress_enable_stop(false);
+-    fprintf(sfd, "SplineFontDB: %.1f\n", 3.0 );
++    fprintf(sfd, "SplineFontDB: %.1f\n", 3.1 );
+     if ( sf->mm != NULL )
+ 	err = SFD_MMDump(sfd,sf->mm->normal,map,normal,todir,dirname);
+     else
+@@ -3353,6 +3603,7 @@ static void SFDGetSpiros(FILE *sfd,SplineSet *cur) {
+ 	ungetc(ch,sfd);
+ }
+ 
++
+ static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
+     SplinePointList *cur=NULL, *head=NULL;
+     BasePoint current;
+@@ -3510,6 +3761,257 @@ static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
+ return( head );
+ }
+ 
++#define VERIFYVALORRET( actual, expected, msg ) \
++    if( actual != expected ) { \
++        printf("VerifyTestObjects() FAILED because %s is not correct..\n",msg); \
++    }
++
++    
++static void verifyTestRefChar( SplineChar *sc, RefChar* ref )
++{
++    VERIFYVALORRET( ref->unicode_enc, 3, "ref:unicode_enc" );
++    VERIFYVALORRET( ref->orig_pos,    4, "ref:orig_pos" );
++    VERIFYVALORRET( ref->adobe_enc,   getAdobeEnc("g"), "ref:adobe_enc" );
++    VERIFYVALORRET( ref->transform[0], 1.0, "ref:transform[0]" );
++    VERIFYVALORRET( ref->transform[3], 1.0, "ref:transform[3]" );
++}
++
++static void verifyTestAnchor( SplineChar *sc,  AnchorPoint* ap )
++{
++    
++}
++
++static void verifyTestImageList( SplineChar *sc, struct imagelist * images )
++{
++    
++}
++
++
++static void VerifyTestObjects( SplineChar *sc, Undoes *u )
++{
++    printf("VerifyTestObjects(top)\n");
++    
++    if( u->undotype != ut_state
++        || u->u.state.width != 4321 )
++    {
++        printf("VerifyTestObjects() FAILED because magic state/width combination not set!\n");
++        return;
++    }
++
++    if( u->was_modified != 1 )
++    {
++        printf("VerifyTestObjects() FAILED because   was_modified   is not correct.\n");
++        return;
++    }
++    
++    if( u->was_order2 != 1 )
++    {
++        printf("VerifyTestObjects() FAILED because    was_order2   is not correct.\n");
++        return;
++    }
++
++    if( u->u.state.width != 4321 )
++    {
++        printf("VerifyTestObjects() FAILED because    width   is not correct.\n");
++        return;
++    }
++
++    if( u->u.state.vwidth != 102 )
++    {
++        printf("VerifyTestObjects() FAILED because    vwidth   is not correct.\n");
++        return;
++    }
++
++    verifyTestRefChar( sc, u->u.state.refs );
++    verifyTestAnchor( sc,  u->u.state.anchor );
++    verifyTestImageList( sc, u->u.state.images );
++}
++
++
++static Undoes *SFDGetUndo( SplineFont *sf, FILE *sfd, SplineChar *sc,
++                           const char* startTag, const char* endTag, int current_layer )
++{
++    Undoes *u = 0;
++    char tok[2000], ch;
++    int i;
++    RefChar *lastr=NULL;
++    ImageList *lasti=NULL;
++    AnchorPoint *lastap = NULL;
++    SplineChar* tsc = 0;
++    int haveReadAHint = 0;
++    
++    if ( getname(sfd,tok)!=1 )
++        return( NULL );
++    printf("SFDGetUndo() tok:%s startTag:%s\n", tok, startTag );
++    if ( strcmp(tok, startTag) )
++        return( NULL );
++
++    u = chunkalloc(sizeof(Undoes));
++    u->undotype = ut_state;
++
++    while ( 1 )
++    {
++        if ( getname(sfd,tok)!=1 )
++        {
++            chunkfree(u,sizeof(Undoes));
++            return( NULL );
++        }
++        printf("SFDGetUndo tok:%s\n", tok );
++        if ( !strmatch(tok,"EndUndoOperation")
++            || !strmatch(tok,"EndRedoOperation"))
++        {
++            printf("getUndo(end)  type:%d  want:%d\n", u->undotype, ut_state );
++            if( u->undotype == ut_state )
++                printf("getUndo(end) width:%d\n", u->u.state.width );
++            if( u->undotype == ut_state && u->u.state.width == 4321 )
++            {
++                VerifyTestObjects( sc, u );
++            }
++
++            if( u->undotype == ut_hints )
++            {
++                if( tsc )
++                {
++                    u->u.state.hints = UHintCopy(tsc,1);
++                    SplineCharFree( tsc );
++                }
++            }
++            
++            return u;
++        }
++        if ( !strmatch(tok,"Index:"))
++        {
++            getint(sfd,&i);
++        }
++        if ( !strmatch(tok,"Type:"))
++        {
++            getint(sfd,&i);
++            u->undotype = i;
++            if( u->undotype == ut_hints )
++            {
++                tsc = SplineCharCopy( sc, 0, 0 );
++                tsc->hstem = 0;
++                tsc->vstem = 0;
++                tsc->dstem = 0;
++            }
++        }
++        if ( !strmatch(tok,"WasModified:"))
++        {
++            getint(sfd,&i);
++            u->was_modified = i;
++        }
++        if ( !strmatch(tok,"WasOrder2:"))
++        {
++            getint(sfd,&i);
++            u->was_order2 = i;
++        }
++
++        switch( u->undotype )
++        {
++            case ut_state:
++                if ( !strmatch(tok,"Width:"))          { getint(sfd,&i); u->u.state.width = i; }
++                if ( !strmatch(tok,"VWidth:"))         { getint(sfd,&i); u->u.state.vwidth = i; }
++                if ( !strmatch(tok,"LBearingChange:")) { getint(sfd,&i); u->u.state.lbearingchange = i; }
++                if ( !strmatch(tok,"UnicodeEnc:"))     { getint(sfd,&i); u->u.state.unicodeenc = i; }
++                if ( !strmatch(tok,"Charname:"))       { u->u.state.charname = getquotedeol(sfd); }
++                if ( !strmatch(tok,"Comment:"))        { u->u.state.comment  = getquotedeol(sfd); }
++
++                if( !strmatch(tok,"Refer:"))
++                {
++                    RefChar *ref = SFDGetRef(sfd,strmatch(tok,"Ref:")==0);
++                    if ( !u->u.state.refs )
++                        u->u.state.refs = ref;
++                    else
++		lastr->next = ref;
++                    lastr = ref;
++                }
++
++                if( !strmatch(tok,"Image:"))
++                {
++                    int ly = current_layer;
++                    ImageList *img = SFDGetImage(sfd);
++                    if ( !u->u.state.images )
++		u->u.state.images = img;
++                    else
++		lasti->next = img;
++                    lasti = img;
++                }
++                
++                
++                if ( !strmatch(tok,"Comment:"))
++                {
++                    u->u.state.comment  = getquotedeol(sfd);
++                }
++
++                if ( !strmatch(tok,"InstructionsLength:"))     { getint(sfd,&i); u->u.state.instrs_len = i; }
++
++                if( !strmatch(tok,"AnchorPoint:") )
++                {
++                    lastap = SFDReadAnchorPoints( sfd, sc, &(u->u.state.anchor), lastap );
++                }
++                
++                
++                if ( !strmatch(tok,"SplineSet"))
++                {
++                    u->u.state.splines = SFDGetSplineSet(sf,sfd,sc->layers[current_layer].order2);
++                }
++
++/* #ifdef FONTFORGE_CONFIG_TYPE3 */
++
++/*                 if ( !strmatch(tok,"DoFill:"))       { getint(sfd,&i); u->u.state.dofill = i; } */
++/*                 if ( !strmatch(tok,"DoStroke:"))     { getint(sfd,&i); u->u.state.dostroke = i; } */
++/*                 if ( !strmatch(tok,"FillFirst:"))    { getint(sfd,&i); u->u.state.fillfirst = i; } */
++/* #endif */
++            
++                break;
++
++            case ut_hints:
++            {
++                if ( !strmatch(tok,"HStem:") )
++                {
++                    tsc->hstem = SFDReadHints(sfd);
++                    tsc->hconflicts = StemListAnyConflicts(tsc->hstem);
++                    haveReadAHint = 1;
++                }
++                else if ( !strmatch(tok,"VStem:") )
++                {
++                    tsc->vstem = SFDReadHints(sfd);
++                    tsc->vconflicts = StemListAnyConflicts(tsc->vstem);
++                    haveReadAHint = 1;
++                }
++                else if( !strmatch(tok,"DStem2:"))
++                {
++                    tsc->dstem = SFDReadDHints( sc->parent,sfd,false );
++                    haveReadAHint = 1;
++                }
++                else if( !strmatch(tok,"TtInstrs:"))
++                {
++                    SFDGetTtInstrs(sfd,tsc);
++                    u->u.state.instrs = tsc->ttf_instrs;
++                    u->u.state.instrs_len = tsc->ttf_instrs_len;
++                    tsc->ttf_instrs = 0;
++                    tsc->ttf_instrs_len = 0;
++                }
++                
++//                if( u->copied_from && u->copied_from->fullname )
++//                    fprintf(sfd, "CopiedFrom: %s\n", u->copied_from->fullname );
++                break;
++            }
++            
++            case ut_width:
++            case ut_vwidth:
++            {
++                if( !strmatch(tok,"Width:"))
++                    { getint(sfd,&i); u->u.width = i; }
++                break;
++            }
++                
++        }
++    }
++
++    return u;
++}
++
+ static void SFDGetMinimumDistances(FILE *sfd, SplineChar *sc) {
+     SplineSet *ss;
+     SplinePoint *sp;
+@@ -3803,7 +4305,8 @@ static void SFDSkipValDevTab(FILE *sfd) {
+ }
+ #endif
+ 
+-static AnchorPoint *SFDReadAnchorPoints(FILE *sfd,SplineChar *sc,AnchorPoint *lastap) {
++static AnchorPoint *SFDReadAnchorPoints(FILE *sfd,SplineChar *sc,AnchorPoint** alist, AnchorPoint *lastap)
++{
+     AnchorPoint *ap = chunkalloc(sizeof(AnchorPoint));
+     AnchorClass *an;
+     char *name;
+@@ -3859,11 +4362,75 @@ return( lastap );
+ return( lastap );
+     }
+     if ( lastap==NULL )
+-	sc->anchor = ap;
++        (*alist) = ap;
+     else
+-	lastap->next = ap;
+-return( ap );
+-}
++        lastap->next = ap;
++    
++    return( ap );
++}
++
++
++/* static AnchorPoint *SFDReadAnchorPoints(FILE *sfd,SplineChar *sc,AnchorPoint *lastap) { */
++/*     AnchorPoint *ap = chunkalloc(sizeof(AnchorPoint)); */
++/*     AnchorClass *an; */
++/*     char *name; */
++/*     char tok[200]; */
++/*     int ch; */
++
++/*     name = SFDReadUTF7Str(sfd); */
++/*     if ( name==NULL ) { */
++/* 	LogError( "Anchor Point with no class name: %s", sc->name ); */
++/* return( lastap ); */
++/*     } */
++/*     for ( an=sc->parent->anchor; an!=NULL && strcmp(an->name,name)!=0; an=an->next ); */
++/*     free(name); */
++/*     ap->anchor = an; */
++/*     getreal(sfd,&ap->me.x); */
++/*     getreal(sfd,&ap->me.y); */
++/*     ap->type = -1; */
++/*     if ( getname(sfd,tok)==1 ) { */
++/* 	if ( strcmp(tok,"mark")==0 ) */
++/* 	    ap->type = at_mark; */
++/* 	else if ( strcmp(tok,"basechar")==0 ) */
++/* 	    ap->type = at_basechar; */
++/* 	else if ( strcmp(tok,"baselig")==0 ) */
++/* 	    ap->type = at_baselig; */
++/* 	else if ( strcmp(tok,"basemark")==0 ) */
++/* 	    ap->type = at_basemark; */
++/* 	else if ( strcmp(tok,"entry")==0 ) */
++/* 	    ap->type = at_centry; */
++/* 	else if ( strcmp(tok,"exit")==0 ) */
++/* 	    ap->type = at_cexit; */
++/*     } */
++/*     getsint(sfd,&ap->lig_index); */
++/*     ch = nlgetc(sfd); */
++/*     ungetc(ch,sfd); */
++/*     if ( ch==' ' ) { */
++/* #ifdef FONTFORGE_CONFIG_DEVICETABLES */
++/* 	SFDReadDeviceTable(sfd,&ap->xadjust); */
++/* 	SFDReadDeviceTable(sfd,&ap->yadjust); */
++/* #else */
++/* 	SFDSkipDeviceTable(sfd); */
++/* 	SFDSkipDeviceTable(sfd); */
++/* #endif */
++/* 	ch = nlgetc(sfd); */
++/* 	ungetc(ch,sfd); */
++/* 	if ( isdigit(ch)) { */
++/* 	    getsint(sfd,(int16 *) &ap->ttf_pt_index); */
++/* 	    ap->has_ttf_pt = true; */
++/* 	} */
++/*     } */
++/*     if ( ap->anchor==NULL || ap->type==-1 ) { */
++/* 	LogError( "Bad Anchor Point: %s", sc->name ); */
++/* 	AnchorPointsFree(ap); */
++/* return( lastap ); */
++/*     } */
++/*     if ( lastap==NULL ) */
++/* 	sc->anchor = ap; */
++/*     else */
++/* 	lastap->next = ap; */
++/* return( ap ); */
++/* } */
+ 
+ static RefChar *SFDGetRef(FILE *sfd, int was_enc) {
+     RefChar *rf;
+@@ -4174,6 +4741,7 @@ return( NULL );
+ 	    SplineCharFree(sc);
+ return( NULL );
+ 	}
++//            printf("tok:%s\n", tok );
+ 	if ( strmatch(tok,"Encoding:")==0 ) {
+ 	    int enc;
+ 	    getint(sfd,&enc);
+@@ -4362,7 +4930,7 @@ return( NULL );
+ 		SFDGetHintMask(sfd,&sc->countermasks[i]);
+ 	    }
+ 	} else if ( strmatch(tok,"AnchorPoint:")==0 ) {
+-	    lastap = SFDReadAnchorPoints(sfd,sc,lastap);
++	    lastap = SFDReadAnchorPoints(sfd,sc,&sc->anchor,lastap);
+ 	} else if ( strmatch(tok,"Fore")==0 ) {
+ 	    while ( isspace(ch = nlgetc(sfd)));
+ 	    ungetc(ch,sfd);
+@@ -4477,7 +5045,50 @@ return( NULL );
+ 	} else if ( strmatch(tok,"StrokePattern:")==0 ) {
+ 	    sc->layers[current_layer].stroke_pen.brush.pattern = SFDParsePattern(sfd,tok);
+ #endif
+-	} else if ( strmatch(tok,"SplineSet")==0 ) {
++	} else if ( strmatch(tok,"UndoRedoHistory")==0 ) {
++
++                printf("UndoRedoHistory token found!\n");
++
++                getname(sfd,tok);
++                if ( !strmatch(tok,"Layer:") )
++                {
++                    int layer;
++                    getint(sfd,&layer);
++                }
++                
++                Undoes *undo = 0;
++                struct undoes *last = 0;
++                
++                getname(sfd,tok);
++                if ( !strmatch(tok,"Undoes") )
++                {
++                    undo = 0;
++                    last = sc->layers[current_layer].undoes;
++                    while( undo = SFDGetUndo( sf, sfd, sc, "UndoOperation", "EndUndoOperation", current_layer ) ) 
++                    {
++                        printf("have undo... type:%d\n", undo->undotype );
++                        // push to back
++                        if( last ) last->next = undo;
++                        else       sc->layers[current_layer].undoes = undo;
++                        last = undo;
++                    }
++                }
++                
++                getname(sfd,tok);
++                if ( !strmatch(tok,"Redoes") )
++                {
++                    undo = 0;
++                    last = sc->layers[current_layer].redoes;
++                    while( undo = SFDGetUndo( sf, sfd, sc, "RedoOperation", "EndRedoOperation", current_layer ) ) 
++                    {
++                        printf("have a redo operation!\n");
++                        // push to back
++                        if( last ) last->next = undo;
++                        else       sc->layers[current_layer].redoes = undo;
++                        last = undo;
++                    }
++                }
++            } else if ( strmatch(tok,"SplineSet")==0 ) {
+ 	    sc->layers[current_layer].splines = SFDGetSplineSet(sf,sfd,sc->layers[current_layer].order2);
+ 	} else if ( strmatch(tok,"Ref:")==0 || strmatch(tok,"Refer:")==0 ) {
+ 	    /* I should be depending on the version number here, but I made */
+@@ -7315,8 +7926,12 @@ return( -1 );
+     /*  this sequence, but I don't yet generate it. I want the parser to */
+     /*  perculate through to users before I introduce the new format so there */
+     /*  will be fewer complaints when it happens */
+-    if ( dval!=0 && dval!=1 && dval!=2.0 && dval!=3.0 && dval!=4.0 ) {
+-	LogError("Bad SFD Version number %.1f", dval );
++    // MIQ: getreal() can give some funky rounding errors it seems
++    if ( dval!=0 && dval!=1 && dval!=2.0 && dval!=3.0
++         && !(dval > 3.09 && dval <= 3.11)
++         && dval!=4.0 )
++    {
++        LogError("Bad SFD Version number %.1f", dval );
+ return( -1 );
+     }
+     ch = nlgetc(sfd); ungetc(ch,sfd);
+@@ -7741,7 +8356,7 @@ return;
+ 	    }
+ 	}
+ 	if ( ssf->glyphs[i]!=NULL && ssf->glyphs[i]->changed )
+-	    SFDDumpChar( asfd,ssf->glyphs[i],map,NULL);
++	    SFDDumpChar( asfd,ssf->glyphs[i],map,NULL,1);
+     }
+     fprintf( asfd, "EndChars\n" );
+     fprintf( asfd, "EndSplineFont\n" );
+diff --git a/fontforge/views.h b/fontforge/views.h
+index b726ccf..cac0cf4 100644
+--- a/fontforge/views.h
++++ b/fontforge/views.h
+@@ -164,6 +164,7 @@ typedef struct charview {
+     unsigned int showalmosthvcurves: 1;
+     unsigned int checkselfintersects: 1;
+     unsigned int showdebugchanges: 1;
++    unsigned int inPreviewMode: 1;
+     int hvoffset;		/* for showalmosthvlines */
+     int layers_off_top;
+     real scale;
+diff --git a/fonttools/sfd-version-convert.pl b/fonttools/sfd-version-convert.pl
+new file mode 100755
+index 0000000..d322448
+--- /dev/null
++++ b/fonttools/sfd-version-convert.pl
+@@ -0,0 +1,73 @@
++#!/usr/bin/perl
++
++use Getopt::Long;
++use Pod::Usage;
++
++my $outversion = 0;
++
++GetOptions ("outputversion=f" => \$outversion ) or pod2usage(2);
++if( $outversion == 0 ) 
++{
++    pod2usage(1);
++    die;
++}
++
++$ifilename = shift;
++if( $ifilename eq "" ) { $ifilename = "-"; }
++#print $ifilename;
++
++$ignore = 0;
++$endtok = "";
++open INFILE, $ifilename or die "Can't open input file $ifilename";
++while( <INFILE> ) 
++{
++    if( /^SplineFontDB/ ) {
++	print "SplineFontDB: " . $outversion . "\n";
++	next;
++    }
++    if( /^UndoRedoHistory/ ) {
++	$ignore = 1;
++	$endtok = "^EndUndoRedoHistory";
++    }
++    if( $endtok ne "" && /$endtok/ ) {
++	$ignore = 0;
++	next;
++    }
++
++    if( $ignore == 0 ) 
++    {
++	$line = $_;
++	print $line;
++    }
++}
++
++__END__
++
++=head1 NAME
++
++    sfd-version-convert.pl - Convert an SFD file to an older version if possible
++ 
++=head1 SYNOPSIS
++
++    sfd-version-convert.pl [options] [file ...]
++
++     Options:
++       -outputversion N.N  :  which version of SFD to create
++
++=head1 OPTIONS
++
++=over 8
++
++=item B<-outputversion>
++
++    Which version you would like to create (currently only 3.0 supported).
++    Reading a version 3.1 SFD file to a version 3.0 will:
++    * Remove blocks that contain undo information.
++
++=back
++
++=head1 DESCRIPTION
++
++    B<This program> will try to convert an SFD file to a specific older version
++
++=cut
+diff --git a/gdraw/gxdraw.c b/gdraw/gxdraw.c
+index d409ca1..f442514 100644
+--- a/gdraw/gxdraw.c
++++ b/gdraw/gxdraw.c
+@@ -3471,6 +3471,7 @@ return;
+ 	gevent.type = event->type==KeyPress?et_char:et_charup;
+ 	gevent.u.chr.time = event->xkey.time;
+ 	gevent.u.chr.state = event->xkey.state;
++    gevent.u.chr.autorepeat = 0;
+ /*#ifdef __Mac*/
+ 	/* On mac os x, map the command key to the control key. So Comand-Q=>^Q=>Quit */
+ 	/* No... don't. Let the user have access to the command key as distinct from control */
+@@ -3559,6 +3560,22 @@ return;
+ 	    gevent.u.chr.keysym = keysym;
+ 	    gevent.u.chr.chars[0] = '\0';
+ 	}
++
++    /*
++     * If we are a charup, but the very next XEvent is a chardown
++     * on the same key, then we are just an autorepeat XEvent which
++     * other code might like to ignore
++     */
++	if ( gevent.type==et_charup && XEventsQueued(gdisp->display, QueuedAfterReading))
++    {
++        XEvent nev;
++        XPeekEvent(gdisp->display, &nev);
++        if (nev.type == KeyPress && nev.xkey.time == event->xkey.time &&
++            nev.xkey.keycode == event->xkey.keycode)
++        {
++            gevent.u.chr.autorepeat = 1;
++        }
++    }
+       break;
+       case ButtonPress: case ButtonRelease: case MotionNotify:
+ 	if ( expecting_core && gdisp->last_event_time==event->xbutton.time )
+diff --git a/gtkui/prefs.c b/gtkui/prefs.c
+index b49ee83..42e86e4 100644
+--- a/gtkui/prefs.c
++++ b/gtkui/prefs.c
+@@ -258,7 +258,7 @@ static struct prefs_list {
+ 	{ N_("JoinSnap"), pr_real, &joinsnap, NULL, NULL, '\0', NULL, 0, N_("The Edit->Join command will join points which are this close together\nA value of 0 means they must be coincident") },
+ 	{ N_("StopAtJoin"), pr_bool, &stop_at_join, NULL, NULL, '\0', NULL, 0, N_("When dragging points in the outline view a join may occur\n(two open contours may connect at their endpoints). When\nthis is On a join will cause FontForge to stop moving the\nselection (as if the user had released the mouse button).\nThis is handy if your fingers are inclined to wiggle a bit.") },
+ 	{ N_("CopyMetaData"), pr_bool, &copymetadata, NULL, NULL, '\0', NULL, 0, N_("When copying glyphs from the font view, also copy the\nglyphs' metadata (name, encoding, comment, etc).") },
+-	{ N_("UndoDepth"), pr_int, &maxundoes, NULL, NULL, '\0', NULL, 0, N_("The maximum number of Undoes/Redoes stored in a glyph") },
++	{ N_("UndoDepth"), pr_int, &maxundoes, NULL, NULL, '\0', NULL, 0, N_("The maximum number of Undoes/Redoes stored in a glyph. Use -1 for infinite Undoes\n(but watch RAM consumption and use the Edit menu's Remove Undoes as needed)") },
+ 	{ N_("UpdateFlex"), pr_bool, &updateflex, NULL, NULL, '\0', NULL, 0, N_("Figure out flex hints after every change") },
+ 	{ NULL }
+ },
+diff --git a/inc/gdraw.h b/inc/gdraw.h
+index 7eedc67..2a6c1e5 100644
+--- a/inc/gdraw.h
++++ b/inc/gdraw.h
+@@ -141,6 +141,7 @@ typedef struct gevent {
+ 	    uint16 state;
+ 	    int16 x,y;
+ 	    uint16 keysym;
++        int16 autorepeat;
+ 	    unichar_t chars[_GD_EVT_CHRLEN];
+ 	} chr;
+ 	struct {
