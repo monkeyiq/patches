@@ -739,7 +739,7 @@ index 4bf7426..f9293fb 100644
  	{ N_("AutoKernDialog"), pr_bool, &default_autokern_dlg, NULL, NULL, '\0', NULL, 0, N_("Open AutoKern dialog for new kerning subtables") },
  	{ NULL }
 diff --git a/fontforge/sfd.c b/fontforge/sfd.c
-index 76fcdb5..e2bf280 100644
+index 76fcdb5..dc1397b 100644
 --- a/fontforge/sfd.c
 +++ b/fontforge/sfd.c
 @@ -46,8 +46,17 @@
@@ -1172,16 +1172,19 @@ index 76fcdb5..e2bf280 100644
  		    } else
  			err = true;
  		    free(glyphfile);
-@@ -2522,7 +2787,7 @@ static int SFDDump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
+@@ -2522,7 +2787,10 @@ static int SFDDump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
      ff_progress_start_indicator(10,_("Saving..."),_("Saving Spline Font Database"),_("Saving Outlines"),
  	    realcnt,i+1);
      ff_progress_enable_stop(false);
 -    fprintf(sfd, "SplineFontDB: %.1f\n", 3.0 );
-+    fprintf(sfd, "SplineFontDB: %.1f\n", 3.1 );
++    double version = 3.1;
++    if( !UndoRedoLimitToSave )
++        version = 3.0;
++    fprintf(sfd, "SplineFontDB: %.1f\n", version );
      if ( sf->mm != NULL )
  	err = SFD_MMDump(sfd,sf->mm->normal,map,normal,todir,dirname);
      else
-@@ -3353,6 +3618,7 @@ static void SFDGetSpiros(FILE *sfd,SplineSet *cur) {
+@@ -3353,6 +3621,7 @@ static void SFDGetSpiros(FILE *sfd,SplineSet *cur) {
  	ungetc(ch,sfd);
  }
  
@@ -1189,7 +1192,7 @@ index 76fcdb5..e2bf280 100644
  static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
      SplinePointList *cur=NULL, *head=NULL;
      BasePoint current;
-@@ -3510,6 +3776,257 @@ static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
+@@ -3510,6 +3779,257 @@ static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
  return( head );
  }
  
@@ -1447,7 +1450,7 @@ index 76fcdb5..e2bf280 100644
  static void SFDGetMinimumDistances(FILE *sfd, SplineChar *sc) {
      SplineSet *ss;
      SplinePoint *sp;
-@@ -3803,7 +4320,8 @@ static void SFDSkipValDevTab(FILE *sfd) {
+@@ -3803,7 +4323,8 @@ static void SFDSkipValDevTab(FILE *sfd) {
  }
  #endif
  
@@ -1457,7 +1460,7 @@ index 76fcdb5..e2bf280 100644
      AnchorPoint *ap = chunkalloc(sizeof(AnchorPoint));
      AnchorClass *an;
      char *name;
-@@ -3859,11 +4377,75 @@ return( lastap );
+@@ -3859,11 +4380,75 @@ return( lastap );
  return( lastap );
      }
      if ( lastap==NULL )
@@ -1537,7 +1540,7 @@ index 76fcdb5..e2bf280 100644
  
  static RefChar *SFDGetRef(FILE *sfd, int was_enc) {
      RefChar *rf;
-@@ -4129,6 +4711,46 @@ return( pat );
+@@ -4129,6 +4714,46 @@ return( pat );
  }
  #endif
  
@@ -1584,7 +1587,7 @@ index 76fcdb5..e2bf280 100644
  static int orig_pos;
  
  static SplineChar *SFDGetChar(FILE *sfd,SplineFont *sf, int had_sf_layer_cnt) {
-@@ -4174,6 +4796,7 @@ return( NULL );
+@@ -4174,6 +4799,7 @@ return( NULL );
  	    SplineCharFree(sc);
  return( NULL );
  	}
@@ -1592,7 +1595,7 @@ index 76fcdb5..e2bf280 100644
  	if ( strmatch(tok,"Encoding:")==0 ) {
  	    int enc;
  	    getint(sfd,&enc);
-@@ -4362,7 +4985,7 @@ return( NULL );
+@@ -4362,7 +4988,7 @@ return( NULL );
  		SFDGetHintMask(sfd,&sc->countermasks[i]);
  	    }
  	} else if ( strmatch(tok,"AnchorPoint:")==0 ) {
@@ -1601,7 +1604,7 @@ index 76fcdb5..e2bf280 100644
  	} else if ( strmatch(tok,"Fore")==0 ) {
  	    while ( isspace(ch = nlgetc(sfd)));
  	    ungetc(ch,sfd);
-@@ -4477,7 +5100,81 @@ return( NULL );
+@@ -4477,7 +5103,81 @@ return( NULL );
  	} else if ( strmatch(tok,"StrokePattern:")==0 ) {
  	    sc->layers[current_layer].stroke_pen.brush.pattern = SFDParsePattern(sfd,tok);
  #endif
@@ -1684,7 +1687,7 @@ index 76fcdb5..e2bf280 100644
  	    sc->layers[current_layer].splines = SFDGetSplineSet(sf,sfd,sc->layers[current_layer].order2);
  	} else if ( strmatch(tok,"Ref:")==0 || strmatch(tok,"Refer:")==0 ) {
  	    /* I should be depending on the version number here, but I made */
-@@ -7315,8 +8012,12 @@ return( -1 );
+@@ -7315,8 +8015,12 @@ return( -1 );
      /*  this sequence, but I don't yet generate it. I want the parser to */
      /*  perculate through to users before I introduce the new format so there */
      /*  will be fewer complaints when it happens */
@@ -1699,7 +1702,7 @@ index 76fcdb5..e2bf280 100644
  return( -1 );
      }
      ch = nlgetc(sfd); ungetc(ch,sfd);
-@@ -7741,7 +8442,7 @@ return;
+@@ -7741,7 +8445,7 @@ return;
  	    }
  	}
  	if ( ssf->glyphs[i]!=NULL && ssf->glyphs[i]->changed )
