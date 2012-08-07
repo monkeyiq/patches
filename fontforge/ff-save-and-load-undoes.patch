@@ -1709,10 +1709,10 @@ index 76fcdb5..e2bf280 100644
      fprintf( asfd, "EndChars\n" );
      fprintf( asfd, "EndSplineFont\n" );
 diff --git a/fontforge/splinefont.c b/fontforge/splinefont.c
-index 195c306..93997da 100644
+index 195c306..5eb17c1 100644
 --- a/fontforge/splinefont.c
 +++ b/fontforge/splinefont.c
-@@ -1993,3 +1993,25 @@ void SFLayerSetBackground(SplineFont *sf,int layer,int is_back) {
+@@ -1993,3 +1993,26 @@ void SFLayerSetBackground(SplineFont *sf,int layer,int is_back) {
  	++k;
      } while ( k<sf->subfontcnt );
  }
@@ -1722,7 +1722,8 @@ index 195c306..93997da 100644
 +    if( !p )
 +        return 0;
 +    int ret = 1;
-+    p = *((void**)(p + nextoffset));
++    // list head is a direct pointer to the first struct
++    p = *((void**)p); 
 +    for( ; p; ret++ )
 +    {
 +        p = *((void**)(p + nextoffset));
