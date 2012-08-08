@@ -909,7 +909,7 @@ index 76fcdb5..dad92ec 100644
  	} else if ( strmatch(tok,"Fore")==0 ) {
  	    while ( isspace(ch = nlgetc(sfd)));
  	    ungetc(ch,sfd);
-@@ -4477,6 +4791,70 @@ return( NULL );
+@@ -4477,6 +4791,69 @@ return( NULL );
  	} else if ( strmatch(tok,"StrokePattern:")==0 ) {
  	    sc->layers[current_layer].stroke_pen.brush.pattern = SFDParsePattern(sfd,tok);
  #endif
@@ -932,7 +932,6 @@ index 76fcdb5..dad92ec 100644
 +		last = sc->layers[current_layer].undoes;
 +		while( undo = SFDGetUndo( sf, sfd, sc, "UndoOperation", "EndUndoOperation", current_layer ) ) 
 +		{
-+		    printf("have undo... type:%d\n", undo->undotype );
 +		    // push to back
 +		    if( last ) last->next = undo;
 +		    else       sc->layers[current_layer].undoes = undo;
