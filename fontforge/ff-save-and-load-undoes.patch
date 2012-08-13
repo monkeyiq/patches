@@ -1,12 +1,11 @@
 diff --git a/fontforge/charview.c b/fontforge/charview.c
-index afa6e47..cf8bb3a 100644
+index 242a6db..2cb7ac3 100644
 --- a/fontforge/charview.c
 +++ b/fontforge/charview.c
-@@ -107,6 +107,11 @@ struct cvshows CVShows = {
- 	1,		/* Check for self-intersections in the element view */
- 	1		/* In tt debugging, mark changed rasters differently */
+@@ -109,6 +109,10 @@ struct cvshows CVShows = {
  };
-+
+ struct cvshows CVShowsPrevewToggleSavedState;
+ 
 +#define CID_Base	      1001
 +#define CID_getValueFromUser  CID_Base + 1
 +
@@ -14,7 +13,16 @@ index afa6e47..cf8bb3a 100644
  static Color pointcol = 0xff0000;
  static Color firstpointcol = 0x707000;
  static Color selectedpointcol = 0xc8c800;
-@@ -6767,14 +6938,229 @@ static void CVUnlinkRef(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+@@ -5846,8 +5850,6 @@ void CVPreviewModeSet(GWindow gw, int checked ) {
+     GDrawRequestExpose(cv->v,NULL,false);
+ }
+ 
+-
+-                                    
+ static void CVMenuPreview(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+     CharView *cv = (CharView *) GDrawGetUserData(gw);
+     int checked = mi->ti.checked;
+@@ -6934,14 +6936,229 @@ static void CVUnlinkRef(GWindow gw,struct gmenuitem *mi,GEvent *e) {
      _CVUnlinkRef(cv);
  }
  
@@ -202,21 +210,21 @@ index afa6e47..cf8bb3a 100644
 +
 +    GWidgetIndicateFocusGadget(GWidgetGetControl(gw,CID_getValueFromUser));
 +    GTextFieldSelect(GWidgetGetControl(gw,CID_getValueFromUser),0,-1);
-+
+ 
+-    UndoesFree(cv->b.layerheads[cv->b.drawmode]->undoes);
+-    UndoesFree(cv->b.layerheads[cv->b.drawmode]->redoes);
+-    cv->b.layerheads[cv->b.drawmode]->undoes = cv->b.layerheads[cv->b.drawmode]->redoes = NULL;
 +    GWidgetHidePalettes();
 +    GDrawSetVisible(gw,true);
 +    while ( !DATA.done )
 +	GDrawProcessOneEvent(NULL);
 +    GDrawSetVisible(gw,false);
- 
--    UndoesFree(cv->b.layerheads[cv->b.drawmode]->undoes);
--    UndoesFree(cv->b.layerheads[cv->b.drawmode]->redoes);
--    cv->b.layerheads[cv->b.drawmode]->undoes = cv->b.layerheads[cv->b.drawmode]->redoes = NULL;
++
 +    if( DATA.cancelled )
 +        return 0;
 +    return ret;
- }
- 
++}
++
 +static int toint( char* v )
 +{
 +    if( !v )
@@ -229,8 +237,8 @@ index afa6e47..cf8bb3a 100644
 +    static char buf[101];
 +    snprintf(buf,bufsz,"%ld",v);
 +    return buf;
-+}
-+
+ }
+ 
 +
 +static void CVRemoveUndoes(GWindow gw,struct gmenuitem *mi,GEvent *e)
 +{
@@ -249,13 +257,13 @@ index afa6e47..cf8bb3a 100644
  /* We can only paste if there's something in the copy buffer */
  /* we can only copy if there's something selected to copy */
  /* figure out what things are possible from the edit menu before the user */
-@@ -9422,7 +9808,7 @@ static GMenuItem2 edlist[] = {
-     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, }},
+@@ -9592,7 +9809,7 @@ static GMenuItem2 edlist[] = {
+     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, 0, '\0' }, NULL, NULL, NULL, NULL, 0 }, /* line */
      { { (unichar_t *) N_("U_nlink Reference"), (GImage *) "editunlink.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'U' }, H_("Unlink Reference|Ctl+U"), NULL, NULL, CVUnlinkRef, MID_UnlinkRef },
-     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, }},
+     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, 0, '\0' }, NULL, NULL, NULL, NULL, 0 }, /* line */
 -    { { (unichar_t *) N_("Remo_ve Undoes"), (GImage *) "menuempty.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'e' }, H_("Remove Undoes|No Shortcut"), NULL, NULL, CVRemoveUndoes, MID_RemoveUndoes },
 +    { { (unichar_t *) N_("Remo_ve Undoes..."), (GImage *) "menuempty.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'e' }, H_("Remove Undoes|No Shortcut"), NULL, NULL, CVRemoveUndoes, MID_RemoveUndoes },
-     { NULL }
+     GMENUITEM2_EMPTY
  };
  
 diff --git a/fontforge/cvundoes.c b/fontforge/cvundoes.c
@@ -347,7 +355,7 @@ index fd5623a..339b5d8 100644
      Undoes *unext;
      BDFRefChar *head, *next;
 diff --git a/fontforge/metricsview.c b/fontforge/metricsview.c
-index 6337c67..fc4b16e 100644
+index d32e9dc..954848f 100644
 --- a/fontforge/metricsview.c
 +++ b/fontforge/metricsview.c
 @@ -2774,7 +2774,7 @@ static int PXSZ_OK(GGadget *g, GEvent *e) {
@@ -360,7 +368,7 @@ index 6337c67..fc4b16e 100644
  return( true );
  	}
 diff --git a/fontforge/prefs.c b/fontforge/prefs.c
-index 4bf7426..95c33cf 100644
+index badbc54..f0da3b2 100644
 --- a/fontforge/prefs.c
 +++ b/fontforge/prefs.c
 @@ -167,6 +167,8 @@ extern int aa_pixelsize;			/* from anchorsaway.c */
@@ -372,27 +380,23 @@ index 4bf7426..95c33cf 100644
  
  extern NameList *force_names_when_opening;
  extern NameList *force_names_when_saving;
-@@ -287,6 +289,7 @@ static struct prefs_list {
+@@ -288,6 +290,7 @@ static struct prefs_list {
  #endif
  	{ N_("ExportClipboard"), pr_bool, &export_clipboard, NULL, NULL, '\0', NULL, 0, N_( "If you are running an X11 clipboard manager you might want\nto turn this off. FF can put things into its internal clipboard\nwhich it cannot export to X11 (things like copying more than\none glyph in the fontview). If you have a clipboard manager\nrunning it will force these to be exported with consequent\nloss of data.") },
  	{ N_("AutoSaveFrequency"), pr_int, &AutoSaveFrequency, NULL, NULL, '\0', NULL, 0, N_( "The number of seconds between autosaves. If you set this to 0 there will be no autosaves.") },
 +	{ N_("UndoRedoLimitToSave"), pr_int, &UndoRedoLimitToSave, NULL, NULL, '\0', NULL, 0, N_( "The number of undo and redo operations which will be saved in sfd files.\nIf you set this to 0 undo/redo information is not saved to sfd files.\nIf set to -1 then all available undo/redo information is saved without limit.") },
- 	{ NULL }
+ 	PREFS_LIST_EMPTY
  },
    new_list[] = {
-@@ -302,6 +305,7 @@ static struct prefs_list {
+@@ -303,6 +306,7 @@ static struct prefs_list {
  	{ N_("PreserveTables"), pr_string, &SaveTablesPref, NULL, NULL, 'P', NULL, 0, N_("Enter a list of 4 letter table tags, separated by commas.\nFontForge will make a binary copy of these tables when it\nloads a True/OpenType font, and will output them (unchanged)\nwhen it generates the font. Do not include table tags which\nFontForge thinks it understands.") },
  	{ N_("SeekCharacter"), pr_unicode, &home_char, NULL, NULL, '\0', NULL, 0, N_("When fontforge opens a (non-sfd) font it will try to display this unicode character in the fontview.")},
  	{ N_("CompactOnOpen"), pr_bool, &compact_font_on_open, NULL, NULL, 'O', NULL, 0, N_("When a font is opened, should it be made compact?")},
 +	{ N_("UndoRedoLimitToLoad"), pr_int, &UndoRedoLimitToLoad, NULL, NULL, '\0', NULL, 0, N_( "The number of undo and redo operations to load from sfd files.\nWith this option you can disgard undo information while loading SFD files.\nIf set to 0 then no undo/redo information is loaded.\nIf set to -1 then all available undo/redo information is loaded without limit.") },
- 	{ NULL }
+ 	PREFS_LIST_EMPTY
  },
    navigation_list[] = {
-	{ N_("GlyphAutoGoto"), pr_bool, &cv_auto_goto, NULL, NULL, '\0', NULL, 0, N_("Typing a normal character in the glyph view window changes the window to look at that character") },
- 	{ N_("OpenCharsInNewWindow"), pr_bool, &OpenCharsInNewWindow, NULL, NULL, '\0', NULL, 0, N_("When double clicking on a character in the font view\nopen that character in a new window, otherwise\nreuse an existing one.") },
- 	{ NULL }
- },
-@@ -319,7 +323,7 @@ static struct prefs_list {
+@@ -320,7 +324,7 @@ static struct prefs_list {
  	{ N_("JoinSnap"), pr_real, &joinsnap, NULL, NULL, '\0', NULL, 0, N_("The Edit->Join command will join points which are this close together\nA value of 0 means they must be coincident") },
  	{ N_("StopAtJoin"), pr_bool, &stop_at_join, NULL, NULL, '\0', NULL, 0, N_("When dragging points in the outline view a join may occur\n(two open contours may connect at their endpoints). When\nthis is On a join will cause FontForge to stop moving the\nselection (as if the user had released the mouse button).\nThis is handy if your fingers are inclined to wiggle a bit.") },
  	{ N_("CopyMetaData"), pr_bool, &copymetadata, NULL, NULL, '\0', NULL, 0, N_("When copying glyphs from the font view, also copy the\nglyphs' metadata (name, encoding, comment, etc).") },
@@ -400,9 +404,9 @@ index 4bf7426..95c33cf 100644
 +	{ N_("UndoDepth"), pr_int, &maxundoes, NULL, NULL, '\0', NULL, 0, N_("The maximum number of Undoes/Redoes stored in a glyph. Use -1 for infinite Undoes\n(but watch RAM consumption and use the Edit menu's Remove Undoes as needed)") },
  	{ N_("UpdateFlex"), pr_bool, &updateflex, NULL, NULL, '\0', NULL, 0, N_("Figure out flex hints after every change") },
  	{ N_("AutoKernDialog"), pr_bool, &default_autokern_dlg, NULL, NULL, '\0', NULL, 0, N_("Open AutoKern dialog for new kerning subtables") },
- 	{ NULL }
+ 	PREFS_LIST_EMPTY
 diff --git a/fontforge/sfd.c b/fontforge/sfd.c
-index 76fcdb5..dad92ec 100644
+index ce9ef5c..cd08261 100644
 --- a/fontforge/sfd.c
 +++ b/fontforge/sfd.c
 @@ -46,8 +46,15 @@
@@ -442,7 +446,7 @@ index 76fcdb5..dad92ec 100644
  static void utf7_encode(FILE *sfd,long ch) {
  
      putc(base64[(ch>>18)&0x3f],sfd);
-@@ -699,10 +720,9 @@ return;
+@@ -699,10 +720,13 @@ return;
  }
  #endif
  
@@ -451,12 +455,16 @@ index 76fcdb5..dad92ec 100644
 -
 -    for ( ap = sc->anchor; ap!=NULL; ap=ap->next ) {
 +static void SFDDumpAnchorPoints(FILE *sfd,AnchorPoint *ap) {
-+    for ( ; ap; ap=ap->next )
++    if (ap==NULL) {
++	return;
++    }
++    
++    for ( ; ap!=NULL; ap=ap->next )
 +    {
  	fprintf( sfd, "AnchorPoint: " );
  	SFDDumpUTF7Str(sfd,ap->anchor->name);
  	fprintf( sfd, "%g %g %s %d",
-@@ -808,6 +828,109 @@ return( NULL );
+@@ -808,6 +832,109 @@ return( NULL );
  return( rle );
  }
  
@@ -566,7 +574,7 @@ index 76fcdb5..dad92ec 100644
  static void SFDDumpImage(FILE *sfd,ImageList *img) {
      GImage *image = img->image;
      struct _GImage *base = image->list_len==0?image->u.image:image->u.images[0];
-@@ -909,10 +1032,9 @@ return;
+@@ -909,10 +1036,9 @@ return;
      }
  }
  
@@ -580,7 +588,7 @@ index 76fcdb5..dad92ec 100644
      char *pt;
      fprintf( sfd, "TtInstrs:\n" );
      for ( pt=instrs; *pt!='\0'; ++pt )
-@@ -921,19 +1043,10 @@ static void SFDDumpTtfInstrs(FILE *sfd,SplineChar *sc) {
+@@ -921,19 +1047,10 @@ static void SFDDumpTtfInstrs(FILE *sfd,SplineChar *sc) {
  	putc('\n',sfd);
      free(instrs);
      fprintf( sfd, "%s\n", end_tt_instrs );
@@ -604,7 +612,7 @@ index 76fcdb5..dad92ec 100644
  }
  
  static void SFDDumpTtfTable(FILE *sfd,struct ttf_table *tab,SplineFont *sf) {
-@@ -1184,9 +1297,6 @@ return( PyFF_UnPickleMeToObjects(buf));
+@@ -1184,9 +1301,6 @@ return( PyFF_UnPickleMeToObjects(buf));
  }
  
  #ifdef FONTFORGE_CONFIG_TYPE3
@@ -614,16 +622,16 @@ index 76fcdb5..dad92ec 100644
  
  static void SFDDumpGradient(FILE *sfd, char *keyword, struct gradient *gradient) {
      int i;
-@@ -1216,7 +1326,7 @@ static void SFDDumpPattern(FILE *sfd, char *keyword, struct pattern *pattern) {
+@@ -1216,7 +1330,7 @@ static void SFDDumpPattern(FILE *sfd, char *keyword, struct pattern *pattern) {
  }
  #endif
  
--static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids) {
-+static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int saveUndoes) {
+-static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int todir) {
++static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int todir,int saveUndoes) {
      ImageList *img;
      KernPair *kp;
      PST *pst;
-@@ -1294,9 +1404,47 @@ static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids) {
+@@ -1297,9 +1411,47 @@ static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int to
      }
      if ( sc->ttf_instrs_len!=0 )
  	SFDDumpTtfInstrs(sfd,sc);
@@ -672,24 +680,24 @@ index 76fcdb5..dad92ec 100644
  #ifdef FONTFORGE_CONFIG_TYPE3
  	if ( sc->parent->multilayer ) {
  	    fprintf(sfd, "Layer: %d  %d %d %d  #%06x %g  #%06x %g %g %s %s [%g %g %g %g] [",
-@@ -2360,14 +2508,14 @@ static int SFD_Dump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
+@@ -2363,14 +2515,14 @@ static int SFD_Dump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
  	for ( i=0; i<sf->glyphcnt; ++i ) {
  	    if ( !SFDOmit(sf->glyphs[i]) ) {
  		if ( !todir )
--		    SFDDumpChar(sfd,sf->glyphs[i],map,newgids);
-+		    SFDDumpChar(sfd,sf->glyphs[i],map,newgids,1 );
+-		    SFDDumpChar(sfd,sf->glyphs[i],map,newgids,todir);
++		SFDDumpChar(sfd,sf->glyphs[i],map,newgids,todir,1);
  		else {
  		    char *glyphfile = galloc(strlen(dirname)+2*strlen(sf->glyphs[i]->name)+20);
  		    FILE *gsfd;
  		    appendnames(glyphfile,dirname,"/",sf->glyphs[i]->name,GLYPH_EXT );
  		    gsfd = fopen(glyphfile,"w");
  		    if ( gsfd!=NULL ) {
--			SFDDumpChar(gsfd,sf->glyphs[i],map,newgids);
-+			SFDDumpChar(gsfd,sf->glyphs[i],map,newgids,1 );
+-			SFDDumpChar(gsfd,sf->glyphs[i],map,newgids,todir);
++			SFDDumpChar(gsfd,sf->glyphs[i],map,newgids,todir,1);
  			if ( ferror(gsfd)) err = true;
  			if ( fclose(gsfd)) err = true;
  		    } else
-@@ -2522,7 +2670,10 @@ static int SFDDump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
+@@ -2525,7 +2677,10 @@ static int SFDDump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
      ff_progress_start_indicator(10,_("Saving..."),_("Saving Spline Font Database"),_("Saving Outlines"),
  	    realcnt,i+1);
      ff_progress_enable_stop(false);
@@ -701,7 +709,7 @@ index 76fcdb5..dad92ec 100644
      if ( sf->mm != NULL )
  	err = SFD_MMDump(sfd,sf->mm->normal,map,normal,todir,dirname);
      else
-@@ -3510,6 +3661,150 @@ static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
+@@ -3513,6 +3668,150 @@ static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
  return( head );
  }
  
@@ -768,7 +776,7 @@ index 76fcdb5..dad92ec 100644
 +
 +        switch( u->undotype )
 +        {
-+	 case ut_state:
++	case ut_state:
 +	    if ( !strmatch(tok,"Width:"))          { getint(sfd,&i); u->u.state.width = i; }
 +	    if ( !strmatch(tok,"VWidth:"))         { getint(sfd,&i); u->u.state.vwidth = i; }
 +	    if ( !strmatch(tok,"LBearingChange:")) { getint(sfd,&i); u->u.state.lbearingchange = i; }
@@ -852,7 +860,7 @@ index 76fcdb5..dad92ec 100644
  static void SFDGetMinimumDistances(FILE *sfd, SplineChar *sc) {
      SplineSet *ss;
      SplinePoint *sp;
-@@ -3803,7 +4098,8 @@ static void SFDSkipValDevTab(FILE *sfd) {
+@@ -3806,7 +4105,8 @@ static void SFDSkipValDevTab(FILE *sfd) {
  }
  #endif
  
@@ -862,7 +870,7 @@ index 76fcdb5..dad92ec 100644
      AnchorPoint *ap = chunkalloc(sizeof(AnchorPoint));
      AnchorClass *an;
      char *name;
-@@ -3859,10 +4155,11 @@ return( lastap );
+@@ -3862,10 +4162,11 @@ return( lastap );
  return( lastap );
      }
      if ( lastap==NULL )
@@ -876,7 +884,7 @@ index 76fcdb5..dad92ec 100644
  }
  
  static RefChar *SFDGetRef(FILE *sfd, int was_enc) {
-@@ -4129,6 +4426,23 @@ return( pat );
+@@ -4132,6 +4433,23 @@ return( pat );
  }
  #endif
  
@@ -900,7 +908,7 @@ index 76fcdb5..dad92ec 100644
  static int orig_pos;
  
  static SplineChar *SFDGetChar(FILE *sfd,SplineFont *sf, int had_sf_layer_cnt) {
-@@ -4362,7 +4676,7 @@ return( NULL );
+@@ -4365,7 +4683,7 @@ return( NULL );
  		SFDGetHintMask(sfd,&sc->countermasks[i]);
  	    }
  	} else if ( strmatch(tok,"AnchorPoint:")==0 ) {
@@ -909,7 +917,7 @@ index 76fcdb5..dad92ec 100644
  	} else if ( strmatch(tok,"Fore")==0 ) {
  	    while ( isspace(ch = nlgetc(sfd)));
  	    ungetc(ch,sfd);
-@@ -4477,6 +4791,68 @@ return( NULL );
+@@ -4480,6 +4798,68 @@ return( NULL );
  	} else if ( strmatch(tok,"StrokePattern:")==0 ) {
  	    sc->layers[current_layer].stroke_pen.brush.pattern = SFDParsePattern(sfd,tok);
  #endif
@@ -978,12 +986,12 @@ index 76fcdb5..dad92ec 100644
  	} else if ( strmatch(tok,"SplineSet")==0 ) {
  	    sc->layers[current_layer].splines = SFDGetSplineSet(sf,sfd,sc->layers[current_layer].order2);
  	} else if ( strmatch(tok,"Ref:")==0 || strmatch(tok,"Refer:")==0 ) {
-@@ -7315,8 +7693,12 @@ return( -1 );
+@@ -7318,8 +7698,12 @@ return( -1 );
      /*  this sequence, but I don't yet generate it. I want the parser to */
      /*  perculate through to users before I introduce the new format so there */
      /*  will be fewer complaints when it happens */
 -    if ( dval!=0 && dval!=1 && dval!=2.0 && dval!=3.0 && dval!=4.0 ) {
--	LogError("Bad SFD Version number %.1f", dval );
+-	LogError(_("Bad SFD Version number %.1f"), dval );
 +    // MIQ: getreal() can give some funky rounding errors it seems
 +    if ( dval!=0 && dval!=1 && dval!=2.0 && dval!=3.0
 +         && !(dval > 3.09 && dval <= 3.11)
@@ -993,55 +1001,15 @@ index 76fcdb5..dad92ec 100644
  return( -1 );
      }
      ch = nlgetc(sfd); ungetc(ch,sfd);
-@@ -7741,7 +8123,7 @@ return;
+@@ -7744,7 +8128,7 @@ return;
  	    }
  	}
  	if ( ssf->glyphs[i]!=NULL && ssf->glyphs[i]->changed )
--	    SFDDumpChar( asfd,ssf->glyphs[i],map,NULL);
-+	    SFDDumpChar( asfd,ssf->glyphs[i],map,NULL,1);
+-	    SFDDumpChar( asfd,ssf->glyphs[i],map,NULL,false);
++	    SFDDumpChar( asfd,ssf->glyphs[i],map,NULL,false,1);
      }
      fprintf( asfd, "EndChars\n" );
      fprintf( asfd, "EndSplineFont\n" );
-diff --git a/fontforge/splinefont.c b/fontforge/splinefont.c
-index 195c306..872a5e0 100644
---- a/fontforge/splinefont.c
-+++ b/fontforge/splinefont.c
-@@ -1993,3 +1993,22 @@ void SFLayerSetBackground(SplineFont *sf,int layer,int is_back) {
- 	++k;
-     } while ( k<sf->subfontcnt );
- }
-+
-+#include <stddef.h>
-+
-+int listLength( void* p, int nextoffset ) {
-+    if( !p )
-+        return 0;
-+    int ret = 1;
-+    p = *((void**)(p + nextoffset));
-+    for( ; p; ret++ ) {
-+        p = *((void**)(p + nextoffset));
-+    }
-+    return ret;
-+}
-+
-+int undoesLength( struct undoes *undoes ) {
-+    int offset = offsetof( Undoes, next );
-+    return listLength( undoes, offset );
-+}
-+
-diff --git a/fontforge/splinefont.h b/fontforge/splinefont.h
-index 97abe23..f575e5f 100644
---- a/fontforge/splinefont.h
-+++ b/fontforge/splinefont.h
-@@ -3234,4 +3234,8 @@ extern bigreal SFDescender(SplineFont *sf, int layer, int return_error);
- 
- extern SplineChar ***GlyphClassesFromNames(SplineFont *sf,char **classnames,
- 	int class_cnt );
-+
-+extern int listLength( void* head, int nextoffset );
-+extern int undoesLength( struct undoes *undoes );
-+
- #endif
 diff --git a/fonttools/sfd-version-convert.pl b/fonttools/sfd-version-convert.pl
 new file mode 100755
 index 0000000..d322448
@@ -1121,6 +1089,26 @@ index 0000000..d322448
 +    B<This program> will try to convert an SFD file to a specific older version
 +
 +=cut
+diff --git a/gdraw/gxdraw.c b/gdraw/gxdraw.c
+index 820ee2e..da33e44 100644
+--- a/gdraw/gxdraw.c
++++ b/gdraw/gxdraw.c
+@@ -3560,6 +3560,7 @@ return;
+ 	    gevent.u.chr.keysym = keysym;
+ 	    gevent.u.chr.chars[0] = '\0';
+ 	}
++
+ 	/*
+ 	 * If we are a charup, but the very next XEvent is a chardown
+ 	 * on the same key, then we are just an autorepeat XEvent which
+@@ -3880,6 +3881,7 @@ return;
+ #endif
+       break;
+     }
++
+     if ( gevent.type != et_noevent && gw!=NULL && gw->eh!=NULL )
+ 	(gw->eh)((GWindow) gw, &gevent);
+     if ( event->type==DestroyNotify && gw!=NULL )
 diff --git a/gtkui/prefs.c b/gtkui/prefs.c
 index b49ee83..42e86e4 100644
 --- a/gtkui/prefs.c
