@@ -1,0 +1,640 @@
+diff --git a/fontforge/charview.c b/fontforge/charview.c
+index 242a6db..6ebf715 100644
+--- a/fontforge/charview.c
++++ b/fontforge/charview.c
+@@ -70,6 +70,8 @@ float arrowAccelFactor=10.;
+ float snapdistance=3.5;
+ int updateflex = false;
+ extern int clear_tt_instructions_when_needed;
++int use_freetype_with_aa_fill_cv = 1;
++int prefs_preview_mode_uses_cairo_fill = 0;
+ int interpCPsOnMotion=false;
+ int default_cv_width = 540;
+ int default_cv_height = 540;
+@@ -105,7 +107,8 @@ struct cvshows CVShows = {
+ 	0,		/* show curves which are almost, but not exactly horizontal or vertical at the end-points */
+ 	3,		/* number of em-units a coord difference must be less than to qualify for almost hv */
+ 	1,		/* Check for self-intersections in the element view */
+-	1		/* In tt debugging, mark changed rasters differently */
++	1,		/* In tt debugging, mark changed rasters differently */
++	0               /* show filled by directly drawing the fill using cairo */
+ };
+ struct cvshows CVShowsPrevewToggleSavedState;
+ 
+@@ -1062,48 +1065,29 @@ return;
+ }
+ 
+ void CVDrawSplineSet(CharView *cv, GWindow pixmap, SplinePointList *set,
+-	Color fg, int dopoints, DRect *clip ) {
++		     Color fg, int dopoints, DRect *clip ) {
++    CVDrawSplineSetSpecialized( cv, pixmap, set, fg, dopoints, clip, sfm_stroke );
++}
++
++void CVDrawSplineSetOutlineOnly(CharView *cv, GWindow pixmap, SplinePointList *set,
++				Color fg, int dopoints, DRect *clip, enum outlinesfm_flags strokeFillMode ) {
+     Spline *spline, *first;
+     SplinePointList *spl;
+     int truetype_markup = set==cv->b.gridfit && cv->dv!=NULL;
++    int currentSplineCounter = 0;
+ 
+-    if ( cv->inactive )
+-	dopoints = false;
+-
+-    GDrawSetFont(pixmap,cv->small);		/* For point numbers */
++    if( strokeFillMode == sfm_fill ) {
++	GDrawFillRuleSetWinding(pixmap);
++    }
+     for ( spl = set; spl!=NULL; spl = spl->next ) {
+-	if ( spl->contour_name!=NULL )
+-	    CVDrawContourName(cv,pixmap,spl,fg);
+-	if ( dopoints>0 || (dopoints==-1 && cv->showpointnumbers) ) {
+-	    first = NULL;
+-	    if ( dopoints>0 )
+-		DrawDirection(cv,pixmap,spl->first);
+-	    if ( cv->b.sc->inspiro && hasspiro()) {
+-		if ( dopoints>=0 ) {
+-		    int i;
+-		    if ( spl->spiros==NULL ) {
+-			spl->spiros = SplineSet2SpiroCP(spl,&spl->spiro_cnt);
+-			spl->spiro_max = spl->spiro_cnt;
+-		    }
+-		    for ( i=0; i<spl->spiro_cnt-1; ++i )
+-			DrawSpiroPoint(cv,pixmap,&spl->spiros[i],spl,i);
+-		}
+-	    } else {
+-		for ( spline = spl->first->next; spline!=NULL && spline!=first; spline=spline->to->next ) {
+-		    DrawPoint(cv,pixmap,spline->from,spl,dopoints<0,truetype_markup);
+-		    if ( first==NULL ) first = spline;
+-		}
+-		if ( spline==NULL )
+-		    DrawPoint(cv,pixmap,spl->last,spl,dopoints<0,truetype_markup);
+-	    }
+-	}
+ 	if ( GDrawHasCairo(pixmap)&gc_buildpath ) {
+ 	    Spline *first, *spline;
+ 	    double x,y, cx1, cy1, cx2, cy2, dx,dy;
+-	    GDrawPathStartNew(pixmap);
++	    GDrawPathStartSubNew(pixmap);
+ 	    x = rpt(cv,  cv->xoff + spl->first->me.x*cv->scale);
+ 	    y = rpt(cv, -cv->yoff + cv->height - spl->first->me.y*cv->scale);
+ 	    GDrawPathMoveTo(pixmap,x+.5,y+.5);
++	    currentSplineCounter++;
+ 	    for ( spline=spl->first->next, first=NULL; spline!=first && spline!=NULL; spline=spline->to->next ) {
+ 		x = rpt(cv,  cv->xoff + spline->to->me.x*cv->scale);
+ 		y = rpt(cv, -cv->yoff + cv->height - spline->to->me.y*cv->scale);
+@@ -1139,13 +1123,89 @@ void CVDrawSplineSet(CharView *cv, GWindow pixmap, SplinePointList *set,
+ 	    }
+ 	    if ( spline!=NULL )
+ 		GDrawPathClose(pixmap);
+-	    GDrawPathStroke(pixmap,(spl->is_clip_path ? clippathcol : fg)|0xff000000);
++
++	    switch( strokeFillMode )
++	    {
++	    case sfm_stroke:
++	    	GDrawPathStroke(pixmap,(spl->is_clip_path ? clippathcol : fg)|0xff000000);
++	    	break;
++	    case sfm_fill:
++	    case sfm_nothing:
++		break;
++	    }
++	    
+ 	} else {
+ 	    GPointList *gpl = MakePoly(cv,spl), *cur;
+ 	    for ( cur=gpl; cur!=NULL; cur=cur->next )
+-		GDrawDrawPoly(pixmap,cur->gp,cur->cnt,spl->is_clip_path ? clippathcol : fg);
++	    	GDrawDrawPoly(pixmap,cur->gp,cur->cnt,spl->is_clip_path ? clippathcol : fg);
+ 	    GPLFree(gpl);
+ 	}
++    }
++
++    switch( strokeFillMode )
++    {
++    case sfm_fill:
++	GDrawPathFill( pixmap, fg|0xff000000);
++	break;
++    case sfm_stroke:
++    case sfm_nothing:
++	break;
++    }
++}
++
++
++void CVDrawSplineSetSpecialized(CharView *cv, GWindow pixmap, SplinePointList *set,
++				Color fg, int dopoints, DRect *clip, enum outlinesfm_flags strokeFillMode ) {
++    Spline *spline, *first;
++    SplinePointList *spl;
++    int truetype_markup = set==cv->b.gridfit && cv->dv!=NULL;
++
++    if ( cv->inactive )
++	dopoints = false;
++
++    GDrawSetFont(pixmap,cv->small);		/* For point numbers */
++    for ( spl = set; spl!=NULL; spl = spl->next ) {
++	if ( spl->contour_name!=NULL )
++	    CVDrawContourName(cv,pixmap,spl,fg);
++	if ( dopoints>0 || (dopoints==-1 && cv->showpointnumbers) ) {
++	    first = NULL;
++	    if ( dopoints>0 )
++		DrawDirection(cv,pixmap,spl->first);
++	    if ( cv->b.sc->inspiro && hasspiro()) {
++		if ( dopoints>=0 ) {
++		    int i;
++		    if ( spl->spiros==NULL ) {
++			spl->spiros = SplineSet2SpiroCP(spl,&spl->spiro_cnt);
++			spl->spiro_max = spl->spiro_cnt;
++		    }
++		    for ( i=0; i<spl->spiro_cnt-1; ++i )
++			DrawSpiroPoint(cv,pixmap,&spl->spiros[i],spl,i);
++		}
++	    } else {
++		for ( spline = spl->first->next; spline!=NULL && spline!=first; spline=spline->to->next ) {
++		    DrawPoint(cv,pixmap,spline->from,spl,dopoints<0,truetype_markup);
++		    if ( first==NULL ) first = spline;
++		}
++		if ( spline==NULL )
++		    DrawPoint(cv,pixmap,spl->last,spl,dopoints<0,truetype_markup);
++	    }
++	}
++    }
++
++    if( strokeFillMode == sfm_fill ) {
++	CVDrawSplineSetOutlineOnly( cv, pixmap, set,
++				    fg, dopoints, clip, strokeFillMode );
++    }
++    if( strokeFillMode != sfm_nothing ) {
++	/*
++	 * If we were filling, we have to stroke the outline again to properly show
++	 * clip path splines which will possibly have a different stroke color
++	 */
++	CVDrawSplineSetOutlineOnly( cv, pixmap, set,
++				    fg, dopoints, clip, sfm_stroke );
++    }
++    
++    for ( spl = set; spl!=NULL; spl = spl->next ) {
+ 	if (( cv->markextrema || cv->markpoi ) && dopoints && !cv->b.sc->inspiro )
+ 	    CVMarkInterestingLocations(cv,pixmap,spl);
+ 	if ( (cv->showalmosthvlines || cv->showalmosthvcurves ) && dopoints )
+@@ -1154,7 +1214,7 @@ void CVDrawSplineSet(CharView *cv, GWindow pixmap, SplinePointList *set,
+ }
+ 
+ static void CVDrawLayerSplineSet(CharView *cv, GWindow pixmap, Layer *layer,
+-	Color fg, int dopoints, DRect *clip ) {
++				 Color fg, int dopoints, DRect *clip, enum outlinesfm_flags strokeFillMode ) {
+ #ifdef FONTFORGE_CONFIG_TYPE3
+     int active = cv->b.layerheads[cv->b.drawmode]==layer;
+     int ml = cv->b.sc->parent->multilayer;
+@@ -1183,7 +1243,7 @@ static void CVDrawLayerSplineSet(CharView *cv, GWindow pixmap, Layer *layer,
+ 	GDrawSetLineWidth(pixmap,0);
+ #endif
+ #else
+-    CVDrawSplineSet(cv,pixmap,layer->splines,fg,dopoints,clip);
++    CVDrawSplineSetSpecialized(cv,pixmap,layer->splines,fg,dopoints,clip,strokeFillMode);
+ #endif
+ }
+ 
+@@ -1935,7 +1995,7 @@ static void CVDrawGridRaster(CharView *cv, GWindow pixmap, DRect *clip ) {
+     }
+     if ( cv->showback[0]&1 ) {
+ 	CVDrawSplineSet(cv,pixmap,cv->b.gridfit,gridfitoutlinecol,
+-		cv->showpoints,clip);
++			cv->showpoints,clip);
+     }
+ }
+ 
+@@ -2194,6 +2254,28 @@ return;				/* no points. no side bearings */
+     }
+ }
+ 
++static int CVExposeGlyphFill(CharView *cv, GWindow pixmap, GEvent *event, DRect* clip ) {
++    int i, layer, rlayer, cvlayer = CVLayer((CharViewBase *) cv);
++    int filled = 0;
++    if (( cv->showfore || cv->b.drawmode==dm_fore ) && cv->showfilled &&
++	cv->filled!=NULL ) {
++	GDrawDrawImage(pixmap, &cv->gi, NULL,
++		       cv->xoff + cv->filled->xmin,
++		       -cv->yoff + cv->height-cv->filled->ymax);
++	filled = 1;
++    }
++
++    if( cv->showfilledusingcairo ) {
++	layer = cvlayer;
++	if ( layer>=0 ) {
++	    CVDrawLayerSplineSet(cv,pixmap,&cv->b.sc->layers[layer],foreoutlinecol,
++				 cv->showpoints, clip, sfm_fill );
++	    filled = 1;
++	}
++    }
++    return(filled);
++}
++
+ static void CVExpose(CharView *cv, GWindow pixmap, GEvent *event ) {
+     SplineFont *sf = cv->b.sc->parent;
+     RefChar *rf;
+@@ -2202,9 +2284,14 @@ static void CVExpose(CharView *cv, GWindow pixmap, GEvent *event ) {
+     char buf[20];
+     PST *pst;
+     int i, layer, rlayer, cvlayer = CVLayer((CharViewBase *) cv);
+-
++    enum outlinesfm_flags strokeFillMode = sfm_stroke;
++    int GlyphHasBeenFilled = 0;
+     GDrawPushClip(pixmap,&event->u.expose.rect,&old);
+ 
++    if( cv->showfilledusingcairo==1 ) {
++	strokeFillMode = sfm_fill;
++    }
++    
+     clip.width = event->u.expose.rect.width/cv->scale;
+     clip.height = event->u.expose.rect.height/cv->scale;
+     clip.x = (event->u.expose.rect.x-cv->xoff)/cv->scale;
+@@ -2275,13 +2362,9 @@ static void CVExpose(CharView *cv, GWindow pixmap, GEvent *event ) {
+ 
+ 	DrawSelImageList(cv,pixmap,cv->b.layerheads[cv->b.drawmode]->images);
+ 
+-	if (( cv->showfore || cv->b.drawmode==dm_fore ) && cv->showfilled &&
+-		cv->filled!=NULL ) {
+-	    /* Wrong order, I know. But it is useful to have the background */
+-	    /*  visible on top of the fill... */
+-	    GDrawDrawImage(pixmap, &cv->gi, NULL, cv->xoff + cv->filled->xmin,
+-		    -cv->yoff + cv->height-cv->filled->ymax);
+-	}
++	/* Wrong order, I know. But it is useful to have the background */
++	/*  visible on top of the fill... */
++	GlyphHasBeenFilled = CVExposeGlyphFill(cv, pixmap, event, &clip );
+     } else {
+ 	/* Draw FreeType Results */
+ 	CVDrawGridRaster(cv,pixmap,&clip);
+@@ -2303,8 +2386,8 @@ static void CVExpose(CharView *cv, GWindow pixmap, GEvent *event ) {
+ 	    /* Then when we moved the fill image around, we had to deal with the */
+ 	    /*  images before the fill... */
+ 	    CVDrawLayerSplineSet(cv,pixmap,&cv->b.sc->layers[layer],
+-		    !sf->multilayer || layer==ly_back ? backoutlinecol : foreoutlinecol,
+-		    false,&clip);
++				 !sf->multilayer || layer==ly_back ? backoutlinecol : foreoutlinecol,
++				 false,&clip,false);
+ 	    for ( rf=cv->b.sc->layers[layer].refs; rf!=NULL; rf = rf->next ) {
+ 		if ( /* cv->b.drawmode==dm_back &&*/ cv->showrefnames )
+ 		    CVDrawRefName(cv,pixmap,rf,0);
+@@ -2327,11 +2410,28 @@ static void CVExpose(CharView *cv, GWindow pixmap, GEvent *event ) {
+     /*  draw the current layer -- unless they've turned on grid fit. Then they*/
+     /*  might want to hide the active layer. */
+     layer = cvlayer;
++
++    /* The call to CVExposeGlyphFill() above will have rendered a filled glyph already. */
++    /* We draw the outline only at this stage so as to have it layered */
++    /* over the control points if they are currently visible. */
++    /* CVDrawLayerSplineSet() will draw both the control points, and the font outline over those */
++    /* NB:
++     *     Drawing the stroked outline may also use the color
++     *     clippathcol for some splines, so we can't really avoid a
++     *     restroke unless we are sure
++     *     FOR-ALL(splines):spl->is_clip_path==0 */
++    if( cv->showfilledusingcairo==1 ) {
++	strokeFillMode = sfm_stroke;
++    }
++    if( GlyphHasBeenFilled ) {
++	strokeFillMode = sfm_stroke;
++    }
++    
+     if ( layer<0 ) /* Guide lines are special */
+ 	CVDrawLayerSplineSet(cv,pixmap,cv->b.layerheads[cv->b.drawmode],foreoutlinecol,
+-		cv->showpoints ,&clip);
++			     cv->showpoints ,&clip,strokeFillMode);
+     else if ( (cv->showback[layer>>5]&(1<<(layer&31))) ||
+-	    (!cv->show_ft_results && cv->dv==NULL )) {
++	      (!cv->show_ft_results && cv->dv==NULL )) {
+ 	for ( rf=cv->b.sc->layers[layer].refs; rf!=NULL; rf = rf->next ) {
+ 	    if ( cv->showrefnames )
+ 		CVDrawRefName(cv,pixmap,rf,0);
+@@ -2340,10 +2440,9 @@ static void CVExpose(CharView *cv, GWindow pixmap, GEvent *event ) {
+ 	    if ( rf->selected && cv->b.layerheads[cv->b.drawmode]==&cv->b.sc->layers[layer])
+ 		CVDrawBB(cv,pixmap,&rf->bb);
+ 	}
+-
+-	CVDrawLayerSplineSet(cv,pixmap,&cv->b.sc->layers[layer],foreoutlinecol,
+-		cv->showpoints ,&clip);
+     }
++    CVDrawLayerSplineSet(cv,pixmap,&cv->b.sc->layers[layer],foreoutlinecol,
++			 cv->showpoints ,&clip,strokeFillMode);
+ 
+     if ( cv->freehand.current_trace!=NULL )
+ 	CVDrawSplineSet(cv,pixmap,cv->freehand.current_trace,tracecol,
+@@ -2450,8 +2549,13 @@ void CVRegenFill(CharView *cv) {
+ 	/*  fill. But on the "M" (and "W") glyph of extravigant caps, ft won't*/
+ 	/*  do a mono fill */
+ 	if ( use_freetype_to_rasterize_fv && hasFreeType()) {
++	    int depth = 1;
++	    if( use_freetype_with_aa_fill_cv ) {
++		depth = 4;
++		clut_len = 16;
++	    }
+ 	    cv->filled = SplineCharFreeTypeRasterizeNoHints(cv->b.sc,layer,
+-		size,72, 1);
++		size,72, depth);
+ 	    if ( cv->filled==NULL && size<2000 ) {
+ 		/* There are some glyphs which freetype won't rasterize in */
+ 		/* mono mode, but will in grey scale. Don't ask me why */
+@@ -2460,8 +2564,9 @@ void CVRegenFill(CharView *cv) {
+ 		clut_len = 16;
+ 	    }
+ 	}
+-	if ( cv->filled==NULL )
++	if ( cv->filled==NULL ) {
+ 	    cv->filled = SplineCharRasterize(cv->b.sc,layer,size+.1);
++	}
+ 	if ( cv->filled==NULL )
+ return;
+ 	cv->gi.u.image->image_type = clut_len==2 ? it_mono : it_index;
+@@ -5047,6 +5152,7 @@ return( true );
+ #define MID_Prev	2008
+ #define MID_HideRulers	2009
+ #define MID_Preview     2010
++#define MID_FillUsingCairo 2011
+ #define MID_NextDef	2012
+ #define MID_PrevDef	2013
+ #define MID_DisplayCompositions	2014
+@@ -5750,10 +5856,21 @@ static void CVMenuFill(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+     CharView *cv = (CharView *) GDrawGetUserData(gw);
+ 
+     CVShows.showfilled = cv->showfilled = !cv->showfilled;
++    CVShows.showfilledusingcairo = cv->showfilledusingcairo = 0;
++    CVRegenFill(cv);
++    GDrawRequestExpose(cv->v,NULL,false);
++}
++
++static void CVMenuFillUsingCairo(GWindow gw,struct gmenuitem *mi,GEvent *e) {
++    CharView *cv = (CharView *) GDrawGetUserData(gw);
++
++    CVShows.showfilledusingcairo = cv->showfilledusingcairo = !cv->showfilledusingcairo;
++    CVShows.showfilled = cv->showfilled = 0;
+     CVRegenFill(cv);
+     GDrawRequestExpose(cv->v,NULL,false);
+ }
+ 
++
+ static struct cvshows* cvshowsCopyTo( struct cvshows* dst, CharView* src ) 
+ {
+     dst->showfore = src->showfore;
+@@ -5763,6 +5880,7 @@ static struct cvshows* cvshowsCopyTo( struct cvshows* dst, CharView* src )
+     dst->showdhints = src->showdhints;
+     dst->showpoints = src->showpoints;
+     dst->showfilled = src->showfilled;
++    dst->showfilledusingcairo = src->showfilledusingcairo;
+     dst->showrulers = src->showrulers;
+     dst->showrounds = src->showrounds;
+     dst->showmdx = src->showmdx;
+@@ -5795,6 +5913,7 @@ static CharView* cvshowsCopyFrom( CharView* dst, struct cvshows* src )
+     dst->showdhints = src->showdhints;
+     dst->showpoints = src->showpoints;
+     dst->showfilled = src->showfilled;
++    dst->showfilledusingcairo = src->showfilledusingcairo;
+     dst->showrulers = src->showrulers;
+     dst->showrounds = src->showrounds;
+     dst->showmdx = src->showmdx;
+@@ -5833,7 +5952,8 @@ void CVPreviewModeSet(GWindow gw, int checked ) {
+         cv->showvhints = 0;
+         cv->showdhints = 0;
+         cv->showpoints = 0;
+-        cv->showfilled = 1;
++        cv->showfilled = !prefs_preview_mode_uses_cairo_fill;
++	cv->showfilledusingcairo = prefs_preview_mode_uses_cairo_fill;
+         cv->showrounds = 0;
+         cv->showanchor = 0;
+         cv->showrefnames = 0;
+@@ -9261,6 +9381,9 @@ static void swlistcheck(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+ 	  case MID_Fill:
+ 	    mi->ti.checked = cv->showfilled;
+ 	  break;
++	  case MID_FillUsingCairo:
++	    mi->ti.checked = cv->showfilledusingcairo;
++	  break;
+ 	  case MID_ShowHHints:
+ 	    mi->ti.checked = cv->showhhints;
+ 	    mi->ti.disabled = sf->multilayer;
+@@ -10010,7 +10133,8 @@ static GMenuItem2 swlist[] = {
+     { { (unichar_t *) N_("(Define \"Almost\")"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'M' }, H_("(Define \"Almost\")|No Shortcut"), NULL, NULL, CVMenuDefineAlmost, MID_DefineAlmost },
+     { { (unichar_t *) N_("_Side Bearings"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'M' }, H_("Side Bearings|No Shortcut"), NULL, NULL, CVMenuShowSideBearings, MID_ShowSideBearings },
+     { { (unichar_t *) N_("Reference Names"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'M' }, H_("Reference Names|No Shortcut"), NULL, NULL, CVMenuShowRefNames, MID_ShowRefNames },
+-    { { (unichar_t *) N_("_Fill"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'l' }, H_("Fill|No Shortcut"), NULL, NULL, CVMenuFill, MID_Fill },
++    { { (unichar_t *) N_("_Fill Using Freetype"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'l' }, H_("Fill|No Shortcut"), NULL, NULL, CVMenuFill, MID_Fill },
++    { { (unichar_t *) N_("Fil_l Using Cairo"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'l' }, H_("Fill|No Shortcut"), NULL, NULL, CVMenuFillUsingCairo, MID_FillUsingCairo },
+     { { (unichar_t *) N_("Previe_w"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 1, 0, 0, 0, 1, 1, 0, 'l' }, H_("Preview|Ctl+`"), NULL, NULL, CVMenuPreview, MID_Preview },
+     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, 0, '\0' }, NULL, NULL, NULL, NULL, 0 }, /* line */
+     { { (unichar_t *) N_("Pale_ttes"), NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'P' }, NULL, pllist, pllistcheck, NULL, 0 },
+@@ -10278,6 +10402,7 @@ static void _CharViewCreate(CharView *cv, SplineChar *sc, FontView *fv,int enc)
+     cv->showpoints = CVShows.showpoints;
+     cv->showrulers = CVShows.showrulers;
+     cv->showfilled = CVShows.showfilled;
++    cv->showfilledusingcairo = CVShows.showfilledusingcairo;
+     cv->showrounds = CVShows.showrounds;
+     cv->showmdx = CVShows.showmdx;
+     cv->showmdy = CVShows.showmdy;
+diff --git a/fontforge/prefs.c b/fontforge/prefs.c
+index badbc54..39a16d9 100644
+--- a/fontforge/prefs.c
++++ b/fontforge/prefs.c
+@@ -55,6 +55,8 @@ extern int adjustlbearing;
+ extern Encoding *default_encoding;
+ extern int autohint_before_generate;
+ extern int use_freetype_to_rasterize_fv;
++extern int use_freetype_with_aa_fill_cv;
++extern int prefs_preview_mode_uses_cairo_fill;
+ extern int OpenCharsInNewWindow;
+ extern int ItalicConstrained;
+ extern int accent_offset;
+@@ -279,9 +281,11 @@ static struct prefs_list {
+ 	{ N_("HelpDir"), pr_file, &helpdir, NULL, NULL, 'H', NULL, 0, N_("The directory on your local system in which FontForge will search for help\nfiles.  If a file is not found there, then FontForge will look for it on the net.") },
+ 	{ N_("OtherSubrsFile"), pr_file, &othersubrsfile, NULL, NULL, 'O', NULL, 0, N_("If you wish to replace Adobe's OtherSubrs array (for Type1 fonts)\nwith an array of your own, set this to point to a file containing\na list of up to 14 PostScript subroutines. Each subroutine must\nbe preceded by a line starting with '%%%%' (any text before the\nfirst '%%%%' line will be treated as an initial copyright notice).\nThe first three subroutines are for flex hints, the next for hint\nsubstitution (this MUST be present), the 14th (or 13 as the\nnumbering actually starts with 0) is for counter hints.\nThe subroutines should not be enclosed in a [ ] pair.") },
+ 	{ N_("FreeTypeInFontView"), pr_bool, &use_freetype_to_rasterize_fv, NULL, NULL, 'O', NULL, 0, N_("Use the FreeType rasterizer (when available)\nto rasterize glyphs in the font view.\nThis generally results in better quality.") },
++	{ N_("FreeTypeAAFillInOutlineView"), pr_bool, &use_freetype_with_aa_fill_cv, NULL, NULL, 'O', NULL, 0, N_("When filling using freetype in the outline view,\nhave freetype render the glyph antialiased.") },
+ 	{ N_("SplashScreen"), pr_bool, &splash, NULL, NULL, 'S', NULL, 0, N_("Show splash screen on start-up") },
+ #ifndef _NO_LIBCAIRO
+ 	{ N_("UseCairoDrawing"), pr_bool, &prefs_usecairo, NULL, NULL, '\0', NULL, 0, N_("Use the cairo library for drawing (if available)\nThis makes for prettier (anti-aliased) but slower drawing\nThis applies to any windows created AFTER this is set.\nAlready existing windows will continue as they are.") },
++	{ N_("PreviewModeFillCairo"), pr_bool, &prefs_preview_mode_uses_cairo_fill, NULL, NULL, 'O', NULL, 0, N_("When in Preview Mode in the outline view,\nuse cairo to render the glyph fill.") },
+ #endif
+ #ifndef _NO_LIBPANGO
+ 	{ N_("UsePangoDrawing"), pr_bool, &prefs_usepango, NULL, NULL, '\0', NULL, 0, N_("Use the pango library for text (if available)\nThis makes for prettier and handles complex scripts.\nBut it can slow things down on older machines.\nThis applies to any windows created AFTER this is set.\nAlready existing windows will continue as they are.") },
+@@ -468,6 +472,7 @@ static struct prefs_list {
+ 	{ "AnchorControlPixelSize", pr_int, &aa_pixelsize, NULL, NULL, '\0', NULL, 1, NULL },
+ #ifdef _NO_LIBCAIRO
+ 	{ "UseCairoDrawing", pr_bool, &prefs_usecairo, NULL, NULL, '\0', NULL, 0, N_("Use the cairo library for drawing (if available)\nThis makes for prettier (anti-aliased) but slower drawing\nThis applies to any windows created AFTER this is set.\nAlready existing windows will continue as they are.") },
++	{ N_("PreviewModeFillCairo"), pr_bool, &prefs_preview_mode_uses_cairo_fill, NULL, NULL, 'O', NULL, 0, N_("When in Preview Mode in the outline view,\nuse cairo to render the glyph fill.") },
+ #endif
+ #ifdef _NO_LIBPANGO
+ 	{ "UsePangoDrawing", pr_bool, &prefs_usepango, NULL, NULL, '\0', NULL, 0, N_("Use the cairo library for drawing (if available)\nThis makes for prettier (anti-aliased) but slower drawing\nThis applies to any windows created AFTER this is set.\nAlready existing windows will continue as they are.") },
+diff --git a/fontforge/views.h b/fontforge/views.h
+index cac0cf4..b98fa5c 100644
+--- a/fontforge/views.h
++++ b/fontforge/views.h
+@@ -56,6 +56,7 @@ extern struct cvshows {
+     int hvoffset;
+     int checkselfintersects;	/* Not really something shown, but convenient to keep it here */
+     int showdebugchanges;	/* Changes the way changing rasters are displayed in tt debug mode */
++    int showfilledusingcairo;   /* fill the glyph, but directly use cairo to do the fill rather than freetype */
+ } CVShows;
+ 
+ extern struct bvshows {
+@@ -165,6 +166,7 @@ typedef struct charview {
+     unsigned int checkselfintersects: 1;
+     unsigned int showdebugchanges: 1;
+     unsigned int inPreviewMode: 1;
++    unsigned int showfilledusingcairo:1;
+     int hvoffset;		/* for showalmosthvlines */
+     int layers_off_top;
+     real scale;
+@@ -786,8 +788,11 @@ extern void SFPrivateInfo(SplineFont *sf);
+ extern void FVDelay(FontView *fv,void (*func)(FontView *));
+ extern void GFI_FinishContextNew(struct gfi_data *d,FPST *fpst, int success);
+ extern void SCPreparePopup(GWindow gw,SplineChar *sc, struct remap *remap, int enc, int actualuni);
++enum outlinesfm_flags { sfm_stroke=0x1, sfm_fill=0x2, sfm_nothing=0x4 };
++extern void CVDrawSplineSetSpecialized(CharView *cv, GWindow pixmap, SplinePointList *set,
++				       Color fg, int dopoints, DRect *clip, enum outlinesfm_flags strokeFillMode );
+ extern void CVDrawSplineSet(CharView *cv, GWindow pixmap, SplinePointList *set,
+-	Color fg, int dopoints, DRect *clip );
++			    Color fg, int dopoints, DRect *clip );
+ extern GWindow CVMakeTools(CharView *cv);
+ extern GWindow CVMakeLayers(CharView *cv);
+ extern GWindow BVMakeTools(BitmapView *bv);
+diff --git a/gdraw/gdraw.c b/gdraw/gdraw.c
+index bf604dd..b4cb3c4 100644
+--- a/gdraw/gdraw.c
++++ b/gdraw/gdraw.c
+@@ -593,6 +593,14 @@ void GDrawPathStartNew(GWindow w) {
+     (w->display->funcs->startNewPath)(w);
+ }
+ 
++void GDrawPathStartSubNew(GWindow w) {
++    (w->display->funcs->startNewSubPath)(w);
++}
++
++int GDrawFillRuleSetWinding(GWindow w) {
++    return (w->display->funcs->fillRuleSetWinding)(w);
++}
++
+ void GDrawPathClose(GWindow w) {
+     (w->display->funcs->closePath)(w);
+ }
+diff --git a/gdraw/gdrawP.h b/gdraw/gdrawP.h
+index 4082a54..87e68d9 100644
+--- a/gdraw/gdrawP.h
++++ b/gdraw/gdrawP.h
+@@ -275,6 +275,8 @@ struct displayfuncs {
+     void (*layoutSetWidth)(GWindow w, int width);
+     int  (*layoutLineCount)(GWindow w);
+     int  (*layoutLineStart)(GWindow w,int line);
++    void (*startNewSubPath)(GWindow w);
++    int  (*fillRuleSetWinding)(GWindow w);
+ };
+ 
+ extern GDisplay *_GXDraw_CreateDisplay(char *displayname,char *programname);
+diff --git a/gdraw/gxcdraw.c b/gdraw/gxcdraw.c
+index c9e88a9..6de6445 100644
+--- a/gdraw/gxcdraw.c
++++ b/gdraw/gxcdraw.c
+@@ -131,6 +131,7 @@ static void (*_cairo_clip)(cairo_t *);
+ static void (*_cairo_save)(cairo_t *);
+ static void (*_cairo_restore)(cairo_t *);
+ static void (*_cairo_new_path)(cairo_t *);
++static void (*_cairo_new_sub_path)(cairo_t *);
+ static void (*_cairo_close_path)(cairo_t *);
+ static void (*_cairo_move_to)(cairo_t *,double,double);
+ static void (*_cairo_line_to)(cairo_t *,double,double);
+@@ -160,7 +161,7 @@ static void (*_cairo_push_group)(cairo_t *);
+ static void (*_cairo_pop_group_to_source)(cairo_t *);
+ static cairo_surface_t *(*_cairo_get_group_target)(cairo_t *);
+ static void (*_cairo_paint)(cairo_t *);
+-
++static void (*_cairo_set_fill_rule)(cairo_t *cr, cairo_fill_rule_t fill_rule);
+ static FcBool (*_FcCharSetHasChar)(const FcCharSet *,FcChar32);
+ static FcPattern *(*_FcPatternCreate)(void);
+ static void (*_FcPatternDestroy)(FcPattern *);
+@@ -263,6 +264,8 @@ return( 0 );
+ 	    dlsym(libcairo,"cairo_set_source_rgba");
+     _cairo_new_path = (void (*)(cairo_t *))
+ 	    dlsym(libcairo,"cairo_new_path");
++    _cairo_new_sub_path = (void (*)(cairo_t *))
++	    dlsym(libcairo,"cairo_new_sub_path");
+     _cairo_move_to = (void (*)(cairo_t *,double,double))
+ 	    dlsym(libcairo,"cairo_move_to");
+     _cairo_line_to = (void (*)(cairo_t *,double,double))
+@@ -333,6 +336,9 @@ return( 0 );
+ 	    dlsym(libcairo,"cairo_get_group_target");
+     _cairo_paint = (void (*)(cairo_t *))
+ 	    dlsym(libcairo,"cairo_paint");
++    _cairo_set_fill_rule = (void (*)(cairo_t *, cairo_fill_rule_t))
++	    dlsym(libcairo,"cairo_set_fill_rule");
++	
+ 
+ /* Didn't show up until 1.6, and I've got 1.2 on my machine */ 
+     if ( _cairo_format_stride_for_width==NULL )
+@@ -363,6 +369,7 @@ return( true );
+ #  define _cairo_set_dash cairo_set_dash
+ #  define _cairo_set_source_rgba cairo_set_source_rgba
+ #  define _cairo_new_path cairo_new_path
++#  define _cairo_new_sub_path cairo_new_sub_path
+ #  define _cairo_move_to cairo_move_to
+ #  define _cairo_line_to cairo_line_to
+ #  define _cairo_curve_to cairo_curve_to
+@@ -721,6 +728,15 @@ void _GXCDraw_PathStartNew(GWindow w) {
+     _cairo_new_path( ((GXWindow) w)->cc );
+ }
+ 
++void _GXCDraw_PathStartSubNew(GWindow w) {
++    _cairo_new_sub_path( ((GXWindow) w)->cc );
++}
++
++int _GXCDraw_FillRuleSetWinding(GWindow w) {
++    _cairo_set_fill_rule(((GXWindow) w)->cc,CAIRO_FILL_RULE_WINDING);
++    return 1;
++}
++
+ void _GXCDraw_PathClose(GWindow w) {
+     _cairo_close_path( ((GXWindow) w)->cc );
+ }
+diff --git a/gdraw/gxdraw.c b/gdraw/gxdraw.c
+index 820ee2e..c96bdf0 100644
+--- a/gdraw/gxdraw.c
++++ b/gdraw/gxdraw.c
+@@ -2485,6 +2485,18 @@ return;
+     _GXCDraw_PathStartNew(w);
+ }
+ 
++static void GXDrawPathStartSubNew(GWindow w) {
++    if ( !((GXWindow) w)->usecairo )
++return;
++    _GXCDraw_PathStartSubNew(w);
++}
++
++static int GXDrawFillRuleSetWinding(GWindow w) {
++    if ( !((GXWindow) w)->usecairo )
++return 0;
++    return _GXCDraw_FillRuleSetWinding(w);
++}
++
+ static void GXDrawPathClose(GWindow w) {
+     if ( !((GXWindow) w)->usecairo )
+ return;
+@@ -2541,6 +2553,13 @@ return( gc_xor );
+ static void GXDrawPathStartNew(GWindow w) {
+ }
+ 
++static void GXDrawPathStartSubNew(GWindow w) {
++}
++
++static int GXDrawFillRuleSetWinding(GWindow w) {
++    return 0;
++}
++
+ static void GXDrawPathClose(GWindow w) {
+ }
+ 
+@@ -4918,7 +4937,9 @@ static struct displayfuncs xfuncs = {
+     GXDraw_LayoutExtents,
+     GXDraw_LayoutSetWidth,
+     GXDraw_LayoutLineCount,
+-    GXDraw_LayoutLineStart
++    GXDraw_LayoutLineStart,
++    GXDrawPathStartSubNew,
++    GXDrawFillRuleSetWinding
+ };
+ 
+ static void GDrawInitXKB(GXDisplay *gdisp) {
