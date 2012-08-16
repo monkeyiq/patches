@@ -1,5 +1,5 @@
 diff --git a/fontforge/charview.c b/fontforge/charview.c
-index 242a6db..2cb7ac3 100644
+index 75c862e..2cbd9b1 100644
 --- a/fontforge/charview.c
 +++ b/fontforge/charview.c
 @@ -109,6 +109,10 @@ struct cvshows CVShows = {
@@ -13,16 +13,7 @@ index 242a6db..2cb7ac3 100644
  static Color pointcol = 0xff0000;
  static Color firstpointcol = 0x707000;
  static Color selectedpointcol = 0xc8c800;
-@@ -5846,8 +5850,6 @@ void CVPreviewModeSet(GWindow gw, int checked ) {
-     GDrawRequestExpose(cv->v,NULL,false);
- }
- 
--
--                                    
- static void CVMenuPreview(GWindow gw,struct gmenuitem *mi,GEvent *e) {
-     CharView *cv = (CharView *) GDrawGetUserData(gw);
-     int checked = mi->ti.checked;
-@@ -6934,14 +6936,229 @@ static void CVUnlinkRef(GWindow gw,struct gmenuitem *mi,GEvent *e) {
+@@ -6933,14 +6937,229 @@ static void CVUnlinkRef(GWindow gw,struct gmenuitem *mi,GEvent *e) {
      _CVUnlinkRef(cv);
  }
  
@@ -50,7 +41,10 @@ index 242a6db..2cb7ac3 100644
 +    }
 +return( true );
 +}
-+
+ 
+-    UndoesFree(cv->b.layerheads[cv->b.drawmode]->undoes);
+-    UndoesFree(cv->b.layerheads[cv->b.drawmode]->redoes);
+-    cv->b.layerheads[cv->b.drawmode]->undoes = cv->b.layerheads[cv->b.drawmode]->redoes = NULL;
 +static int getValueFromUser_OK(GGadget *g, GEvent *e)
 +{
 +    if ( e->type==et_controlevent && e->u.control.subtype == et_buttonactivate ) {
@@ -60,8 +54,8 @@ index 242a6db..2cb7ac3 100644
 +        hd->done = true;
 +    }
 +    return( true );
-+}
-+
+ }
+ 
 +static int getValueFromUser_Cancel(GGadget *g, GEvent *e) {
 +    if ( e->type==et_controlevent && e->u.control.subtype == et_buttonactivate ) {
 +        GetValueDialogData *hd = GDrawGetUserData(GGadgetGetWindow(g));
@@ -210,10 +204,7 @@ index 242a6db..2cb7ac3 100644
 +
 +    GWidgetIndicateFocusGadget(GWidgetGetControl(gw,CID_getValueFromUser));
 +    GTextFieldSelect(GWidgetGetControl(gw,CID_getValueFromUser),0,-1);
- 
--    UndoesFree(cv->b.layerheads[cv->b.drawmode]->undoes);
--    UndoesFree(cv->b.layerheads[cv->b.drawmode]->redoes);
--    cv->b.layerheads[cv->b.drawmode]->undoes = cv->b.layerheads[cv->b.drawmode]->redoes = NULL;
++
 +    GWidgetHidePalettes();
 +    GDrawSetVisible(gw,true);
 +    while ( !DATA.done )
@@ -237,8 +228,8 @@ index 242a6db..2cb7ac3 100644
 +    static char buf[101];
 +    snprintf(buf,bufsz,"%ld",v);
 +    return buf;
- }
- 
++}
++
 +
 +static void CVRemoveUndoes(GWindow gw,struct gmenuitem *mi,GEvent *e)
 +{
@@ -257,7 +248,16 @@ index 242a6db..2cb7ac3 100644
  /* We can only paste if there's something in the copy buffer */
  /* we can only copy if there's something selected to copy */
  /* figure out what things are possible from the edit menu before the user */
-@@ -9592,7 +9809,7 @@ static GMenuItem2 edlist[] = {
+@@ -6993,6 +7212,8 @@ static void cv_edlistcheck(CharView *cv,struct gmenuitem *mi,GEvent *e,int is_cv
+ 		    !GDrawSelectionHasType(cv->gw,sn_clipboard,"image/ps");
+ 	  break;
+ 	  case MID_Undo:
++	      printf("char: %s\n", cv->b.sc->name );
++	      printf("mid_undo: %p\n",cv->b.layerheads[cv->b.drawmode]->undoes);
+ 	    mi->ti.disabled = cv->b.layerheads[cv->b.drawmode]->undoes==NULL;
+ 	  break;
+ 	  case MID_Redo:
+@@ -9591,7 +9812,7 @@ static GMenuItem2 edlist[] = {
      { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, 0, '\0' }, NULL, NULL, NULL, NULL, 0 }, /* line */
      { { (unichar_t *) N_("U_nlink Reference"), (GImage *) "editunlink.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'U' }, H_("Unlink Reference|Ctl+U"), NULL, NULL, CVUnlinkRef, MID_UnlinkRef },
      { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, 0, '\0' }, NULL, NULL, NULL, NULL, 0 }, /* line */
@@ -355,7 +355,7 @@ index fd5623a..339b5d8 100644
      Undoes *unext;
      BDFRefChar *head, *next;
 diff --git a/fontforge/metricsview.c b/fontforge/metricsview.c
-index d32e9dc..954848f 100644
+index 98024cd..dda4089 100644
 --- a/fontforge/metricsview.c
 +++ b/fontforge/metricsview.c
 @@ -2774,7 +2774,7 @@ static int PXSZ_OK(GGadget *g, GEvent *e) {
@@ -368,7 +368,7 @@ index d32e9dc..954848f 100644
  return( true );
  	}
 diff --git a/fontforge/prefs.c b/fontforge/prefs.c
-index badbc54..f0da3b2 100644
+index 828edef..321b5d5 100644
 --- a/fontforge/prefs.c
 +++ b/fontforge/prefs.c
 @@ -167,6 +167,8 @@ extern int aa_pixelsize;			/* from anchorsaway.c */
@@ -406,7 +406,7 @@ index badbc54..f0da3b2 100644
  	{ N_("AutoKernDialog"), pr_bool, &default_autokern_dlg, NULL, NULL, '\0', NULL, 0, N_("Open AutoKern dialog for new kerning subtables") },
  	PREFS_LIST_EMPTY
 diff --git a/fontforge/sfd.c b/fontforge/sfd.c
-index ce9ef5c..cd08261 100644
+index cfb1ea5..11bdc95 100644
 --- a/fontforge/sfd.c
 +++ b/fontforge/sfd.c
 @@ -46,8 +46,15 @@
@@ -622,16 +622,17 @@ index ce9ef5c..cd08261 100644
  
  static void SFDDumpGradient(FILE *sfd, char *keyword, struct gradient *gradient) {
      int i;
-@@ -1216,7 +1330,7 @@ static void SFDDumpPattern(FILE *sfd, char *keyword, struct pattern *pattern) {
+@@ -1216,7 +1330,8 @@ static void SFDDumpPattern(FILE *sfd, char *keyword, struct pattern *pattern) {
  }
  #endif
  
 -static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int todir) {
++
 +static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int todir,int saveUndoes) {
      ImageList *img;
      KernPair *kp;
      PST *pst;
-@@ -1297,9 +1411,47 @@ static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int to
+@@ -1297,9 +1412,47 @@ static void SFDDumpChar(FILE *sfd,SplineChar *sc,EncMap *map,int *newgids,int to
      }
      if ( sc->ttf_instrs_len!=0 )
  	SFDDumpTtfInstrs(sfd,sc);
@@ -680,7 +681,7 @@ index ce9ef5c..cd08261 100644
  #ifdef FONTFORGE_CONFIG_TYPE3
  	if ( sc->parent->multilayer ) {
  	    fprintf(sfd, "Layer: %d  %d %d %d  #%06x %g  #%06x %g %g %s %s [%g %g %g %g] [",
-@@ -2363,14 +2515,14 @@ static int SFD_Dump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
+@@ -2365,14 +2518,14 @@ static int SFD_Dump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
  	for ( i=0; i<sf->glyphcnt; ++i ) {
  	    if ( !SFDOmit(sf->glyphs[i]) ) {
  		if ( !todir )
@@ -697,7 +698,7 @@ index ce9ef5c..cd08261 100644
  			if ( ferror(gsfd)) err = true;
  			if ( fclose(gsfd)) err = true;
  		    } else
-@@ -2525,7 +2677,10 @@ static int SFDDump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
+@@ -2527,7 +2680,10 @@ static int SFDDump(FILE *sfd,SplineFont *sf,EncMap *map,EncMap *normal,
      ff_progress_start_indicator(10,_("Saving..."),_("Saving Spline Font Database"),_("Saving Outlines"),
  	    realcnt,i+1);
      ff_progress_enable_stop(false);
@@ -709,7 +710,7 @@ index ce9ef5c..cd08261 100644
      if ( sf->mm != NULL )
  	err = SFD_MMDump(sfd,sf->mm->normal,map,normal,todir,dirname);
      else
-@@ -3513,6 +3668,150 @@ static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
+@@ -3515,6 +3671,157 @@ static SplineSet *SFDGetSplineSet(SplineFont *sf,FILE *sfd,int order2) {
  return( head );
  }
  
@@ -787,6 +788,13 @@ index ce9ef5c..cd08261 100644
 +	    if( !strmatch(tok,"Refer:"))
 +	    {
 +		RefChar *ref = SFDGetRef(sfd,strmatch(tok,"Ref:")==0);
++		int i=0;
++		for( i=0; i< ref->layer_cnt; i++ ) {
++		    ref->layers[i].splines = 0;
++		}
++		printf("undoes, loading a refer. orig_pos:%d unicode_enc:%d ref->sc:%p\n",
++		       ref->orig_pos, ref->unicode_enc, ref->sc );
++		
 +		if ( !u->u.state.refs )
 +		    u->u.state.refs = ref;
 +		else
@@ -860,7 +868,7 @@ index ce9ef5c..cd08261 100644
  static void SFDGetMinimumDistances(FILE *sfd, SplineChar *sc) {
      SplineSet *ss;
      SplinePoint *sp;
-@@ -3806,7 +4105,8 @@ static void SFDSkipValDevTab(FILE *sfd) {
+@@ -3808,7 +4115,8 @@ static void SFDSkipValDevTab(FILE *sfd) {
  }
  #endif
  
@@ -870,7 +878,7 @@ index ce9ef5c..cd08261 100644
      AnchorPoint *ap = chunkalloc(sizeof(AnchorPoint));
      AnchorClass *an;
      char *name;
-@@ -3862,10 +4162,11 @@ return( lastap );
+@@ -3864,10 +4172,11 @@ return( lastap );
  return( lastap );
      }
      if ( lastap==NULL )
@@ -884,7 +892,7 @@ index ce9ef5c..cd08261 100644
  }
  
  static RefChar *SFDGetRef(FILE *sfd, int was_enc) {
-@@ -4132,6 +4433,23 @@ return( pat );
+@@ -4134,6 +4443,40 @@ return( pat );
  }
  #endif
  
@@ -905,10 +913,27 @@ index ce9ef5c..cd08261 100644
 +    }
 +}
 +
++#include <stddef.h>
++int listLength( void* p, int nextoffset ) {
++    if( !p )
++        return 0;
++    int ret = 1;
++    p = *((void**)(p + nextoffset));
++    for( ; p; ret++ ) {
++        p = *((void**)(p + nextoffset));
++    }
++    return ret;
++}
++
++int undoesLength( struct undoes *undoes ) {
++    int offset = offsetof( Undoes, next );
++    return listLength( undoes, offset );
++}
++
  static int orig_pos;
  
  static SplineChar *SFDGetChar(FILE *sfd,SplineFont *sf, int had_sf_layer_cnt) {
-@@ -4365,7 +4683,7 @@ return( NULL );
+@@ -4367,7 +4710,7 @@ return( NULL );
  		SFDGetHintMask(sfd,&sc->countermasks[i]);
  	    }
  	} else if ( strmatch(tok,"AnchorPoint:")==0 ) {
@@ -917,7 +942,7 @@ index ce9ef5c..cd08261 100644
  	} else if ( strmatch(tok,"Fore")==0 ) {
  	    while ( isspace(ch = nlgetc(sfd)));
  	    ungetc(ch,sfd);
-@@ -4480,6 +4798,68 @@ return( NULL );
+@@ -4482,6 +4825,71 @@ return( NULL );
  	} else if ( strmatch(tok,"StrokePattern:")==0 ) {
  	    sc->layers[current_layer].stroke_pen.brush.pattern = SFDParsePattern(sfd,tok);
  #endif
@@ -957,7 +982,10 @@ index ce9ef5c..cd08261 100644
 +		    }
 +		}
 +	    }
-+            
++	    if( sc->layers[current_layer].undoes ) {
++		printf("char:%s\n", sc->name );
++		printf("loaded %d undoes\n", undoesLength( sc->layers[current_layer].undoes ) );
++	    }
 +	    getname(sfd,tok);
 +	    if ( !strmatch(tok,"Redoes") ) {
 +		undo = 0;
@@ -986,7 +1014,69 @@ index ce9ef5c..cd08261 100644
  	} else if ( strmatch(tok,"SplineSet")==0 ) {
  	    sc->layers[current_layer].splines = SFDGetSplineSet(sf,sfd,sc->layers[current_layer].order2);
  	} else if ( strmatch(tok,"Ref:")==0 || strmatch(tok,"Refer:")==0 ) {
-@@ -7318,8 +7698,12 @@ return( -1 );
+@@ -5116,6 +5524,52 @@ return( sc );
+ return( matched );
+ }
+ 
++static void SFDFixupUndoRefsUndoList(SplineFont *sf,Undoes *undo) {
++    for( ; undo; undo = undo->next ) {
++	printf("SFDFixupUndoRefs() u.type:%d refs:%p\n",
++	       undo->undotype, undo->u.state.refs);
++	if( undo->undotype == ut_state && undo->u.state.refs ) {
++	    RefChar *ref=NULL;
++	    for ( ref=undo->u.state.refs; ref!=NULL; ref=ref->next ) {
++
++		ref->sc = sf->glyphs[ ref->orig_pos ];
++		printf("fixed a reference to sc, orig_pos:%d unicode_enc:%d sc->unicodeenc:%d\n",
++		       ref->orig_pos, ref->unicode_enc, ref->sc->unicodeenc );
++	    }
++	}
++    }
++}
++
++static void SFDFixupUndoRefs(SplineFont *sf) {
++    int i=0;
++    Undoes *undo = 0;
++
++    printf("SFDFixupUndoRefs()\n");
++    
++    for ( i=0; i<sf->glyphcnt; ++i ) {
++	if ( sf->glyphs[i]!=NULL ) {
++	    SplineChar *sc = sf->glyphs[i];
++	    int layer = 0;
++	    for ( layer=0; layer<sc->layer_cnt; ++layer ) {
++		if( sc->layers[layer].undoes ) {
++		    printf("SFDFixupUndoRefs() have undoes!\n");
++		    undo = sc->layers[layer].undoes;
++		    SFDFixupUndoRefsUndoList( sf, undo );
++		}
++		if( sc->layers[layer].redoes ) {
++		    printf("SFDFixupUndoRefs() have redoes!\n");
++		    undo = sc->layers[layer].redoes;
++		    SFDFixupUndoRefsUndoList( sf, undo );
++		    
++		}
++	    }
++	}
++    }
++    
++
++}
++
++
+ static void SFDFixupRefs(SplineFont *sf) {
+     int i, isv;
+     RefChar *refs, *rnext, *rprev;
+@@ -7293,6 +7747,8 @@ exit( 1 );
+ 	SFD_AssignLookups((SplineFont1 *) sf);
+     if ( !hadtimes )
+ 	SFTimesFromFile(sf,sfd);
++
++    SFDFixupUndoRefs(sf);
+ return( sf );
+ }
+ 
+@@ -7321,8 +7777,12 @@ return( -1 );
      /*  this sequence, but I don't yet generate it. I want the parser to */
      /*  perculate through to users before I introduce the new format so there */
      /*  will be fewer complaints when it happens */
@@ -1001,7 +1091,7 @@ index ce9ef5c..cd08261 100644
  return( -1 );
      }
      ch = nlgetc(sfd); ungetc(ch,sfd);
-@@ -7744,7 +8128,7 @@ return;
+@@ -7747,7 +8207,7 @@ return;
  	    }
  	}
  	if ( ssf->glyphs[i]!=NULL && ssf->glyphs[i]->changed )
@@ -1010,8 +1100,28 @@ index ce9ef5c..cd08261 100644
      }
      fprintf( asfd, "EndChars\n" );
      fprintf( asfd, "EndSplineFont\n" );
+diff --git a/fontforge/splineutil.c b/fontforge/splineutil.c
+index 8becb17..5e828b2 100644
+--- a/fontforge/splineutil.c
++++ b/fontforge/splineutil.c
+@@ -3085,6 +3085,7 @@ return;
+ #else
+     {
+ #endif
++	printf("SCReinstanciateRefChar() layer_count:%d sc:%p\n",rf->layer_cnt,rf->sc);
+ 	if ( rf->layer_cnt>0 ) {
+ 	    SplinePointListsFree(rf->layers[0].splines);
+ 	    rf->layers[0].splines = NULL;
+@@ -3094,6 +3095,7 @@ return;
+ #ifdef FONTFORGE_CONFIG_TYPE3
+ 	rf->layers[0].dofill = true;
+ #endif
++	printf("splines:%p\n",rf->sc->layers[layer].splines);
+ 	new = SplinePointListTransform(SplinePointListCopy(rf->sc->layers[layer].splines),rf->transform,tpt_AllPoints);
+ 	rf->layers[0].splines = new;
+ 	last = NULL;
 diff --git a/fonttools/sfd-version-convert.pl b/fonttools/sfd-version-convert.pl
-new file mode 100755
+new file mode 100644
 index 0000000..d322448
 --- /dev/null
 +++ b/fonttools/sfd-version-convert.pl
@@ -1090,7 +1200,7 @@ index 0000000..d322448
 +
 +=cut
 diff --git a/gdraw/gxdraw.c b/gdraw/gxdraw.c
-index 820ee2e..da33e44 100644
+index 99e014a..f183eb9 100644
 --- a/gdraw/gxdraw.c
 +++ b/gdraw/gxdraw.c
 @@ -3560,6 +3560,7 @@ return;
@@ -1110,7 +1220,7 @@ index 820ee2e..da33e44 100644
  	(gw->eh)((GWindow) gw, &gevent);
      if ( event->type==DestroyNotify && gw!=NULL )
 diff --git a/gtkui/prefs.c b/gtkui/prefs.c
-index b49ee83..42e86e4 100644
+index e526eff..f77dc13 100644
 --- a/gtkui/prefs.c
 +++ b/gtkui/prefs.c
 @@ -258,7 +258,7 @@ static struct prefs_list {
